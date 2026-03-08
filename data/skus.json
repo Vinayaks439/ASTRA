@@ -1,0 +1,102 @@
+[
+  {
+    "id": "1",
+    "partNo": "ELE-0001",
+    "partName": "VoltEdge Wireless Earbuds Pro",
+    "sellingPrice": 2499.0,
+    "costPrice": 1450.0,
+    "profitMarginPct": 41.98,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "2",
+    "partNo": "ELE-0002",
+    "partName": "VoltEdge USB-C Hub 7-in-1",
+    "sellingPrice": 1899.0,
+    "costPrice": 980.0,
+    "profitMarginPct": 48.39,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "3",
+    "partNo": "ELE-0003",
+    "partName": "VoltEdge Power Bank 20000mAh",
+    "sellingPrice": 1599.0,
+    "costPrice": 920.0,
+    "profitMarginPct": 42.46,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "4",
+    "partNo": "ELE-0004",
+    "partName": "VoltEdge Smart LED Desk Lamp",
+    "sellingPrice": 2199.0,
+    "costPrice": 1150.0,
+    "profitMarginPct": 47.7,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "5",
+    "partNo": "ELE-0005",
+    "partName": "VoltEdge ANC Headphones",
+    "sellingPrice": 4999.0,
+    "costPrice": 2800.0,
+    "profitMarginPct": 43.99,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "6",
+    "partNo": "ELE-0006",
+    "partName": "VoltEdge Mechanical Keyboard RGB",
+    "sellingPrice": 3499.0,
+    "costPrice": 1950.0,
+    "profitMarginPct": 44.27,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "7",
+    "partNo": "ELE-0007",
+    "partName": "VoltEdge 1080p Webcam",
+    "sellingPrice": 2799.0,
+    "costPrice": 1520.0,
+    "profitMarginPct": 45.69,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "8",
+    "partNo": "ELE-0008",
+    "partName": "VoltEdge Wireless Charger Pad",
+    "sellingPrice": 999.0,
+    "costPrice": 480.0,
+    "profitMarginPct": 51.95,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "9",
+    "partNo": "ELE-0009",
+    "partName": "VoltEdge Bluetooth Speaker 20W",
+    "sellingPrice": 3299.0,
+    "costPrice": 1780.0,
+    "profitMarginPct": 46.04,
+    "category": "Electronics",
+    "currency": "INR"
+  },
+  {
+    "id": "10",
+    "partNo": "ELE-0010",
+    "partName": "VoltEdge Laptop Stand Aluminium",
+    "sellingPrice": 1999.0,
+    "costPrice": 1050.0,
+    "profitMarginPct": 47.47,
+    "category": "Electronics",
+    "currency": "INR"
+  }
+]

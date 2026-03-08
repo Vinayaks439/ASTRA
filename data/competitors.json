@@ -1,0 +1,62 @@
+[
+  {
+    "id": "1",
+    "compName": "TechNova India",
+    "platform": "Amazon",
+    "storeUrl": "amazon.in/stores/technova"
+  },
+  {
+    "id": "2",
+    "compName": "GadgetBazaar",
+    "platform": "Amazon",
+    "storeUrl": "amazon.in/stores/gadgetbazaar"
+  },
+  {
+    "id": "3",
+    "compName": "ElectroPrime",
+    "platform": "Amazon",
+    "storeUrl": "amazon.in/stores/electroprime"
+  },
+  {
+    "id": "4",
+    "compName": "CircuitHub Official",
+    "platform": "Amazon",
+    "storeUrl": "amazon.in/stores/circuithub"
+  },
+  {
+    "id": "5",
+    "compName": "DigitalDukaan",
+    "platform": "Amazon",
+    "storeUrl": "amazon.in/stores/digitaldukaan"
+  },
+  {
+    "id": "6",
+    "compName": "ZapStore",
+    "platform": "Shopify",
+    "storeUrl": "zapstore.myshopify.com"
+  },
+  {
+    "id": "7",
+    "compName": "PixelCart",
+    "platform": "Shopify",
+    "storeUrl": "pixelcart.myshopify.com"
+  },
+  {
+    "id": "8",
+    "compName": "ByteShop India",
+    "platform": "Shopify",
+    "storeUrl": "byteshopindia.myshopify.com"
+  },
+  {
+    "id": "9",
+    "compName": "NeonTech Store",
+    "platform": "Shopify",
+    "storeUrl": "neontech.myshopify.com"
+  },
+  {
+    "id": "10",
+    "compName": "OhmKart",
+    "platform": "Shopify",
+    "storeUrl": "ohmkart.myshopify.com"
+  }
+]
