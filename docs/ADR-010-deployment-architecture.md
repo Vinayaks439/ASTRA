@@ -1,0 +1,139 @@
+# ADR-010: Deployment Architecture — AKS + Azure Functions
+
+**Status:** Accepted
+**Date:** 2026-03-08
+**Context:** ASTRA — Autonomous Seller Trading & Risk Analytics
+
+---
+
+## Context
+
+ASTRA's runtime components span a React frontend, Go gRPC backend, six Python AI agents, and supporting Azure PaaS services. The deployment architecture must balance container orchestration for the frontend/backend with serverless execution for event-driven AI agents, while maintaining network security and observability.
+
+## Decision
+
+Deploy the frontend and backend on **Azure Kubernetes Service (AKS)** and all AI agents on **Azure Functions (Flex Consumption Plan)**. Use Azure PaaS for supporting services (Service Bus, Key Vault, Monitor, OpenAI).
+
+### Deployment Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          AZURE SUBSCRIPTION                                  │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                    AZURE KUBERNETES SERVICE (AKS)                      │  │
+│  │                                                                       │  │
+│  │  ┌─────────────────────┐     ┌──────────────────────────────────┐    │  │
+│  │  │ Namespace: frontend  │     │ Namespace: backend               │    │  │
+│  │  │                     │     │                                  │    │  │
+│  │  │ ┌─────────────────┐ │     │ ┌────────────────────────────┐  │    │  │
+│  │  │ │ React App       │ │     │ │ Go gRPC Server             │  │    │  │
+│  │  │ │ (nginx:alpine)  │ │     │ │ (go:1.22-alpine)           │  │    │  │
+│  │  │ │                 │ │     │ │                            │  │    │  │
+│  │  │ │ Replicas: 2     │ │     │ │ Replicas: 3               │  │    │  │
+│  │  │ │ Port: 80/443    │ │     │ │ Ports: 50051(gRPC)        │  │    │  │
+│  │  │ └─────────────────┘ │     │ │        8080(REST/health)  │  │    │  │
+│  │  │                     │     │ └────────────────────────────┘  │    │  │
+│  │  │ ┌─────────────────┐ │     │                                  │    │  │
+│  │  │ │ Ingress (AGIC)  │ │     │ ┌────────────────────────────┐  │    │  │
+│  │  │ │ TLS termination │ │     │ │ Envoy Sidecar (gRPC-Web)  │  │    │  │
+│  │  │ └─────────────────┘ │     │ └────────────────────────────┘  │    │  │
+│  │  └─────────────────────┘     └──────────────────────────────────┘    │  │
+│  │                                                                       │  │
+│  │  ┌──────────────────────────────────────────────────────────────────┐ │  │
+│  │  │ Shared: Azure Service Bus connection, Key Vault CSI driver       │ │  │
+│  │  └──────────────────────────────────────────────────────────────────┘ │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │              AZURE FUNCTIONS (Flex Consumption Plan)                   │  │
+│  │                                                                       │  │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌─────────────┐ │  │
+│  │  │ Risk Agent   │ │ Recommend    │ │ Triage Agent │ │ Rationale   │ │  │
+│  │  │ Function     │ │ Agent Func   │ │ Function     │ │ Agent Func  │ │  │
+│  │  │              │ │              │ │              │ │             │ │  │
+│  │  │ Python 3.12  │ │ Python 3.12  │ │ Python 3.12  │ │ Python 3.12 │ │  │
+│  │  │ Durable      │ │ Durable      │ │ Durable      │ │ Durable     │ │  │
+│  │  └──────────────┘ └──────────────┘ └──────────────┘ └─────────────┘ │  │
+│  │                                                                       │  │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────────────┐  │  │
+│  │  │ Insights     │ │ Notification │ │ Cosmos DB MCP Server         │  │  │
+│  │  │ Agent Func   │ │ Agent Func   │ │ (@azure/cosmos sidecar)      │  │  │
+│  │  │              │ │              │ │                              │  │  │
+│  │  │ Python 3.12  │ │ Python 3.12  │ │ Shared by all agents         │  │  │
+│  │  │ Durable      │ │ Durable      │ │                              │  │  │
+│  │  └──────────────┘ └──────────────┘ └──────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌───────────────────────┐  ┌──────────────────────────────────────────┐   │
+│  │ AZURE COSMOS DB       │  │ SUPPORTING SERVICES                      │   │
+│  │                       │  │                                          │   │
+│  │ API: NoSQL            │  │ ┌────────────────┐ ┌──────────────────┐ │   │
+│  │ Tier: Serverless      │  │ │ Azure Service  │ │ Azure Key Vault  │ │   │
+│  │                       │  │ │ Bus (Standard) │ │                  │ │   │
+│  │ Containers: 8         │  │ │                │ │ DB conn strings  │ │   │
+│  │ Documents: ~23,780    │  │ │ Queues:        │ │ API keys         │ │   │
+│  │                       │  │ │ risk.assess    │ │ Agent secrets    │ │   │
+│  │ Backup: Continuous    │  │ │ risk.result    │ │                  │ │   │
+│  │ 7-day retention       │  │ │ recommend      │ │                  │ │   │
+│  └───────────────────────┘  │ │ ticket.create  │ │                  │ │   │
+│                              │ │ notify         │ │                  │ │   │
+│  ┌───────────────────────┐  │ │ audit.write    │ │                  │ │   │
+│  │ AZURE OPENAI          │  │ └────────────────┘ └──────────────────┘ │   │
+│  │                       │  │                                          │   │
+│  │ Model: GPT-4o         │  │ ┌────────────────┐ ┌──────────────────┐ │   │
+│  │ Region: East US       │  │ │ Azure Monitor  │ │ App Insights     │ │   │
+│  │ Deployment: astra-gpt │  │ │ + Log Analytics│ │ (OpenTelemetry)  │ │   │
+│  │ TPM: 60K              │  │ └────────────────┘ └──────────────────┘ │   │
+│  └───────────────────────┘  └──────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                    NETWORKING                                         │  │
+│  │                                                                       │  │
+│  │  Azure Application Gateway (WAF v2) → AKS Ingress                    │  │
+│  │  Private Endpoints: Cosmos DB, Service Bus, Key Vault               │  │
+│  │  VNet Integration: AKS subnet, Functions subnet, Cosmos subnet       │  │
+│  │  NSG: Restrict agent-to-Cosmos traffic to MCP port only              │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Container Images
+
+| Service | Base Image | Ports | Replicas |
+|---|---|---|---|
+| Frontend | `node:22-alpine` (build) -> `nginx:alpine` (serve) | 80 | 2 |
+| Backend | `golang:1.22-alpine` (build) -> `gcr.io/distroless/static` | 50051, 8080 | 3 |
+| Envoy Proxy | `envoyproxy/envoy:v1.30` | 8443 | Sidecar |
+
+### Azure Functions Configuration
+
+| Agent | Plan | Runtime | Trigger | Concurrency |
+|---|---|---|---|---|
+| Risk Assessment | Flex Consumption | Python 3.12 | Service Bus / HTTP | 10 |
+| Recommendation | Flex Consumption | Python 3.12 | A2A HTTP | 10 |
+| Exception Triage | Flex Consumption | Python 3.12 | A2A HTTP | 5 |
+| Rationale | Flex Consumption | Python 3.12 | A2A HTTP | 5 |
+| AI Insights | Flex Consumption | Python 3.12 | Timer (5min) / HTTP | 1 |
+| Notification | Flex Consumption | Python 3.12 | A2A HTTP / Service Bus | 3 |
+
+### CI/CD Pipeline
+
+```
+GitHub Actions
+    │
+    ├── frontend/    → docker build → ACR → AKS rolling update
+    ├── backend/     → docker build → ACR → AKS rolling update
+    ├── agents/      → func azure functionapp publish (per agent)
+    └── infra/       → Bicep/Terraform → Azure Resource Manager
+```
+
+## Consequences
+
+- AKS provides auto-scaling, health checks, and rolling updates for the always-on frontend and backend.
+- Azure Functions Flex Consumption eliminates idle compute costs for bursty agent workloads.
+- Durable Functions maintain agent state across long-running orchestrations without custom state management.
+- Private endpoints and VNet integration ensure all data traffic stays within the Azure backbone.
+- WAF v2 on Application Gateway provides DDoS protection and OWASP rule enforcement at the edge.
+- Separate CI/CD pipelines per layer enable independent deployment cadences.
+- Distroless base images for the Go backend minimize attack surface and image size.
