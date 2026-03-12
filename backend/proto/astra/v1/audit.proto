@@ -1,0 +1,41 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/api/annotations.proto";
+
+service AuditService {
+  rpc ListEntries(ListEntriesRequest) returns (ListEntriesResponse) {
+    option (google.api.http) = { get: "/api/v1/audit" };
+  }
+  rpc GetEntry(GetEntryRequest) returns (AuditEntry) {
+    option (google.api.http) = { get: "/api/v1/audit/{id}" };
+  }
+}
+
+message AuditEntry {
+  string id = 1;
+  string timestamp = 2;
+  string sku_id = 3;
+  string sku_name = 4;
+  string action = 5;
+  string type = 6;
+  string whatsapp_status = 7;
+  string actor = 8;
+}
+
+message ListEntriesRequest {
+  string type_filter = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListEntriesResponse {
+  repeated AuditEntry entries = 1;
+  int32 total = 2;
+}
+
+message GetEntryRequest {
+  string id = 1;
+}

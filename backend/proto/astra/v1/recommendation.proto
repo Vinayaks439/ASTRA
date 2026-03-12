@@ -1,0 +1,73 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/api/annotations.proto";
+
+service RecommendationService {
+  rpc GetRecommendation(GetRecommendationRequest) returns (Recommendation) {
+    option (google.api.http) = { get: "/api/v1/recommendations/{sku_id}" };
+  }
+  rpc ListRecommendations(ListRecommendationsRequest) returns (ListRecommendationsResponse) {
+    option (google.api.http) = { get: "/api/v1/recommendations" };
+  }
+  rpc ExecuteAction(ExecuteActionRequest) returns (ExecuteActionResponse) {
+    option (google.api.http) = { post: "/api/v1/recommendations/{sku_id}/execute" body: "*" };
+  }
+  rpc GeneratePO(GeneratePORequest) returns (PurchaseOrder) {
+    option (google.api.http) = { post: "/api/v1/recommendations/{sku_id}/po" body: "*" };
+  }
+}
+
+message Recommendation {
+  string id = 1;
+  string sku_id = 2;
+  string action = 3;
+  double suggested_price = 4;
+  string rationale = 5;
+  double confidence = 6;
+  string agent_mode = 7;
+}
+
+message PurchaseOrder {
+  string id = 1;
+  string sku_id = 2;
+  string vendor = 3;
+  int32 quantity = 4;
+  double estimated_cost = 5;
+  string rationale = 6;
+}
+
+message GetRecommendationRequest {
+  string sku_id = 1;
+}
+
+message ListRecommendationsRequest {
+  string band_filter = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListRecommendationsResponse {
+  repeated Recommendation recommendations = 1;
+  int32 total = 2;
+}
+
+message ExecuteActionRequest {
+  string sku_id = 1;
+  string action = 2;
+  double new_price = 3;
+  string executed_by = 4;
+}
+
+message ExecuteActionResponse {
+  bool success = 1;
+  string audit_entry_id = 2;
+  string message = 3;
+}
+
+message GeneratePORequest {
+  string sku_id = 1;
+  int32 quantity_override = 2;
+}

@@ -1,0 +1,17 @@
+{
+  "name": "rationale-agent",
+  "description": "Generates natural language rationale for agent decisions",
+  "url": "https://astra-rationale-agent.azurewebsites.net",
+  "version": "1.0.0",
+  "capabilities": { "streaming": false, "pushNotifications": false },
+  "skills": [
+    {
+      "id": "explain",
+      "name": "Generate Rationale",
+      "description": "Produce human-readable explanation for a SKU's recommended action",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "authentication": { "schemes": ["bearer"], "credentials": "azure-entra-token" }
+}

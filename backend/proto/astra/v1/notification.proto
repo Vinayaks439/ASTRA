@@ -1,0 +1,36 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/api/annotations.proto";
+
+service NotificationService {
+  rpc SendWhatsApp(SendWhatsAppRequest) returns (SendWhatsAppResponse) {
+    option (google.api.http) = { post: "/api/v1/notifications/whatsapp" body: "*" };
+  }
+  rpc GetDeliveryStatus(GetDeliveryStatusRequest) returns (DeliveryStatus) {
+    option (google.api.http) = { get: "/api/v1/notifications/{message_id}/status" };
+  }
+}
+
+message SendWhatsAppRequest {
+  string ticket_id = 1;
+  string phone_number = 2;
+  string message_body = 3;
+}
+
+message SendWhatsAppResponse {
+  string message_id = 1;
+  string status = 2;
+}
+
+message GetDeliveryStatusRequest {
+  string message_id = 1;
+}
+
+message DeliveryStatus {
+  string message_id = 1;
+  string status = 2;
+  string delivered_at = 3;
+}

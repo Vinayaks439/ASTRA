@@ -1,0 +1,69 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/api/annotations.proto";
+
+service SnapshotService {
+  rpc GetOwnSnapshots(GetOwnSnapshotsRequest) returns (OwnSnapshotResponse) {
+    option (google.api.http) = { get: "/api/v1/snapshots/own" };
+  }
+  rpc GetCompSnapshots(GetCompSnapshotsRequest) returns (CompSnapshotResponse) {
+    option (google.api.http) = { get: "/api/v1/snapshots/comp" };
+  }
+}
+
+message OwnSnapshot {
+  string id = 1;
+  string sku_id = 2;
+  string part_no = 3;
+  string period = 4;
+  double avg_price = 5;
+  double min_price = 6;
+  double max_price = 7;
+  double avg_margin_pct = 8;
+  int32 avg_stock = 9;
+  double avg_velocity = 10;
+  int32 total_units_sold = 11;
+  double est_revenue = 12;
+}
+
+message CompSnapshot {
+  string id = 1;
+  string competitor_id = 2;
+  string comp_name = 3;
+  string sku_id = 4;
+  string part_no = 5;
+  string platform = 6;
+  string period = 7;
+  double avg_comp_price = 8;
+  double min_comp_price = 9;
+  double max_comp_price = 10;
+  double avg_price_gap_pct = 11;
+}
+
+message GetOwnSnapshotsRequest {
+  string sku_id = 1;
+  string granularity = 2;
+  string start_period = 3;
+  string end_period = 4;
+}
+
+message OwnSnapshotResponse {
+  repeated OwnSnapshot snapshots = 1;
+  int32 total = 2;
+}
+
+message GetCompSnapshotsRequest {
+  string sku_id = 1;
+  string competitor_id = 2;
+  string granularity = 3;
+  string start_period = 4;
+  string end_period = 5;
+}
+
+message CompSnapshotResponse {
+  repeated CompSnapshot snapshots = 1;
+  int32 total = 2;
+}

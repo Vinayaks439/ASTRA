@@ -1,0 +1,23 @@
+{
+  "name": "risk-assessment-agent",
+  "description": "Computes composite risk scores for SKUs",
+  "url": "https://astra-risk-agent.azurewebsites.net",
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": false
+  },
+  "skills": [
+    {
+      "id": "assess-risk",
+      "name": "Assess SKU Risk",
+      "description": "Compute risk scores for one or more SKUs based on pricing, stock, velocity, and margin data",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "authentication": {
+    "schemes": ["bearer"],
+    "credentials": "azure-entra-token"
+  }
+}
