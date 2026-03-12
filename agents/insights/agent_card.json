@@ -1,0 +1,17 @@
+{
+  "name": "insights-agent",
+  "description": "Produces natural language insights for the AI Summary Panel",
+  "url": "https://astra-insights-agent.azurewebsites.net",
+  "version": "1.0.0",
+  "capabilities": { "streaming": false, "pushNotifications": false },
+  "skills": [
+    {
+      "id": "generate-insights",
+      "name": "Generate Dashboard Insights",
+      "description": "Produce 3 NL insight strings and KPI narratives from aggregated metrics",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "authentication": { "schemes": ["bearer"], "credentials": "azure-entra-token" }
+}

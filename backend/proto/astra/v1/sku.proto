@@ -1,0 +1,97 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+service SKUService {
+  rpc ListSKUs(ListSKUsRequest) returns (ListSKUsResponse) {
+    option (google.api.http) = { get: "/api/v1/skus" };
+  }
+  rpc GetSKU(GetSKURequest) returns (SKU) {
+    option (google.api.http) = { get: "/api/v1/skus/{id}" };
+  }
+  rpc CreateSKU(CreateSKURequest) returns (SKU) {
+    option (google.api.http) = { post: "/api/v1/skus" body: "*" };
+  }
+  rpc UpdateSKU(UpdateSKURequest) returns (SKU) {
+    option (google.api.http) = { put: "/api/v1/skus/{id}" body: "*" };
+  }
+  rpc DeleteSKU(DeleteSKURequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = { delete: "/api/v1/skus/{id}" };
+  }
+}
+
+message RiskScores {
+  double price_gap = 1;
+  double stock_coverage = 2;
+  double demand_trend = 3;
+  double margin_proximity = 4;
+}
+
+message SKU {
+  string id = 1;
+  string part_no = 2;
+  string part_name = 3;
+  double selling_price = 4;
+  double cost_price = 5;
+  double profit_margin_pct = 6;
+  string category = 7;
+  string currency = 8;
+  RiskScores risk_scores = 9;
+  string band = 10;
+  string agent_mode = 11;
+  string top_driver = 12;
+  double composite_score = 13;
+  double confidence = 14;
+}
+
+message AggregatedCounts {
+  int32 critical = 1;
+  int32 warning = 2;
+  int32 healthy = 3;
+  int32 open_tickets = 4;
+  int32 auto_actions = 5;
+}
+
+message ListSKUsRequest {
+  string search = 1;
+  string band_filter = 2;
+  string sort_by = 3;
+  string sort_order = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+message ListSKUsResponse {
+  repeated SKU skus = 1;
+  int32 total = 2;
+  AggregatedCounts counts = 3;
+}
+
+message GetSKURequest {
+  string id = 1;
+}
+
+message CreateSKURequest {
+  string part_no = 1;
+  string part_name = 2;
+  double selling_price = 3;
+  double cost_price = 4;
+  string category = 5;
+  string currency = 6;
+}
+
+message UpdateSKURequest {
+  string id = 1;
+  string part_name = 2;
+  double selling_price = 3;
+  double cost_price = 4;
+  string category = 5;
+}
+
+message DeleteSKURequest {
+  string id = 1;
+}

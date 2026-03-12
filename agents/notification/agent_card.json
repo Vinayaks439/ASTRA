@@ -1,0 +1,17 @@
+{
+  "name": "notification-agent",
+  "description": "Composes and sends WhatsApp notifications for exception tickets",
+  "url": "https://astra-notification-agent.azurewebsites.net",
+  "version": "1.0.0",
+  "capabilities": { "streaming": false, "pushNotifications": true },
+  "skills": [
+    {
+      "id": "notify",
+      "name": "Send Notification",
+      "description": "Compose and send WhatsApp messages for tickets and daily digests",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "authentication": { "schemes": ["bearer"], "credentials": "azure-entra-token" }
+}
