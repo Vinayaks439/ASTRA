@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -40,14 +41,14 @@ type Skill struct {
 }
 
 type A2ATask struct {
-	JSONRPC string      `json:"jsonrpc"`
-	Method  string      `json:"method"`
-	ID      string      `json:"id"`
-	Params  TaskParams  `json:"params"`
+	JSONRPC string     `json:"jsonrpc"`
+	Method  string     `json:"method"`
+	ID      string     `json:"id"`
+	Params  TaskParams `json:"params"`
 }
 
 type TaskParams struct {
-	ID      string    `json:"id"`
+	ID      string     `json:"id"`
 	Message A2AMessage `json:"message"`
 }
 
@@ -69,8 +70,8 @@ type A2AResponse struct {
 }
 
 type TaskResult struct {
-	ID        string       `json:"id"`
-	Status    TaskStatus   `json:"status"`
+	ID        string        `json:"id"`
+	Status    TaskStatus    `json:"status"`
 	Artifacts []A2AArtifact `json:"artifacts,omitempty"`
 }
 
@@ -84,16 +85,23 @@ type A2AArtifact struct {
 	Parts []TaskPart `json:"parts"`
 }
 
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 func NewA2AClient() *A2AClient {
 	return &A2AClient{
 		httpClient: &http.Client{Timeout: 90 * time.Second},
 		agentURLs: map[string]string{
-			"risk-assessment":  "http://localhost:7071",
-			"recommendation":   "http://localhost:7072",
-			"exception-triage": "http://localhost:7073",
-			"rationale":        "http://localhost:7074",
-			"insights":         "http://localhost:7075",
-			"notification":     "http://localhost:7076",
+			"risk-assessment":  envOrDefault("RISK_AGENT_URL", "http://localhost:7071"),
+			"recommendation":   envOrDefault("RECOMMENDATION_AGENT_URL", "http://localhost:7072"),
+			"exception-triage": envOrDefault("TRIAGE_AGENT_URL", "http://localhost:7073"),
+			"rationale":        envOrDefault("RATIONALE_AGENT_URL", "http://localhost:7074"),
+			"insights":         envOrDefault("INSIGHTS_AGENT_URL", "http://localhost:7075"),
+			"notification":     envOrDefault("NOTIFICATION_AGENT_URL", "http://localhost:7076"),
 		},
 	}
 }

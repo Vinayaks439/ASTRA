@@ -1,0 +1,73 @@
+name: Deploy Agents
+
+on:
+  push:
+    branches: [main]
+    paths: ['agents/**']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+  RESOURCE_GROUP: ${{ vars.AKS_RESOURCE_GROUP }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        agent:
+          - name: risk-assessment
+            module: risk_assessment.agent
+            port: "7071"
+          - name: recommendation
+            module: recommendation.agent
+            port: "7072"
+          - name: exception-triage
+            module: exception_triage.agent
+            port: "7073"
+          - name: rationale
+            module: rationale.agent
+            port: "7074"
+          - name: insights
+            module: insights.agent
+            port: "7075"
+          - name: notification
+            module: notification.agent
+            port: "7076"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Build and Push Agent Image
+        run: |
+          IMAGE_TAG=${{ env.ACR_LOGIN_SERVER }}/astra-agent-${{ matrix.agent.name }}:${{ github.sha }}
+          IMAGE_LATEST=${{ env.ACR_LOGIN_SERVER }}/astra-agent-${{ matrix.agent.name }}:latest
+          docker build \
+            --build-arg AGENT_MODULE=${{ matrix.agent.module }} \
+            --build-arg AGENT_PORT=${{ matrix.agent.port }} \
+            -t $IMAGE_TAG \
+            -t $IMAGE_LATEST \
+            -f agents/Dockerfile \
+            agents/
+          docker push $IMAGE_TAG
+          docker push $IMAGE_LATEST
+
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name ca-astra-${{ matrix.agent.name }}-dev \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/astra-agent-${{ matrix.agent.name }}:${{ github.sha }}
