@@ -12,7 +12,10 @@
 
 # testing
 /coverage
-
+/gen/go/*
+/.venv/
+/__pycache__/
+*.pyc
 # next.js
 /.next/
 /out/
