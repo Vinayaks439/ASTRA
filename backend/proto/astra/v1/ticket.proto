@@ -1,0 +1,72 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/api/annotations.proto";
+
+service TicketService {
+  rpc ListTickets(ListTicketsRequest) returns (ListTicketsResponse) {
+    option (google.api.http) = { get: "/api/v1/tickets" };
+  }
+  rpc GetTicket(GetTicketRequest) returns (Ticket) {
+    option (google.api.http) = { get: "/api/v1/tickets/{id}" };
+  }
+  rpc CreateTicket(CreateTicketRequest) returns (Ticket) {
+    option (google.api.http) = { post: "/api/v1/tickets" body: "*" };
+  }
+  rpc ApproveTicket(ApproveTicketRequest) returns (Ticket) {
+    option (google.api.http) = { post: "/api/v1/tickets/{id}/approve" body: "*" };
+  }
+  rpc RejectTicket(RejectTicketRequest) returns (Ticket) {
+    option (google.api.http) = { post: "/api/v1/tickets/{id}/reject" body: "*" };
+  }
+}
+
+message Ticket {
+  string id = 1;
+  string sku_id = 2;
+  string sku_name = 3;
+  string action = 4;
+  repeated string breaches = 5;
+  double composite_score = 6;
+  string band = 7;
+  string status = 8;
+  string created_at = 9;
+  string whatsapp_status = 10;
+}
+
+message ListTicketsRequest {
+  string status_filter = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+message ListTicketsResponse {
+  repeated Ticket tickets = 1;
+  int32 total = 2;
+}
+
+message GetTicketRequest {
+  string id = 1;
+}
+
+message CreateTicketRequest {
+  string sku_id = 1;
+  string sku_name = 2;
+  string action = 3;
+  repeated string breaches = 4;
+  double composite_score = 5;
+  string band = 6;
+}
+
+message ApproveTicketRequest {
+  string id = 1;
+  string approved_by = 2;
+}
+
+message RejectTicketRequest {
+  string id = 1;
+  string rejected_by = 2;
+  string reason = 3;
+}

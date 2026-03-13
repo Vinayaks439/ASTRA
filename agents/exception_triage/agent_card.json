@@ -1,0 +1,17 @@
+{
+  "name": "exception-triage-agent",
+  "description": "Enforces guardrails and creates exception tickets for threshold breaches",
+  "url": "https://astra-triage-agent.azurewebsites.net",
+  "version": "1.0.0",
+  "capabilities": { "streaming": false, "pushNotifications": false },
+  "skills": [
+    {
+      "id": "triage",
+      "name": "Exception Triage",
+      "description": "Determine auto vs manual and create tickets for breached recommendations",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "authentication": { "schemes": ["bearer"], "credentials": "azure-entra-token" }
+}

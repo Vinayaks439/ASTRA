@@ -1,0 +1,17 @@
+{
+  "name": "recommendation-agent",
+  "description": "Generates pricing and reorder recommendations from risk scores",
+  "url": "https://astra-rec-agent.azurewebsites.net",
+  "version": "1.0.0",
+  "capabilities": { "streaming": false, "pushNotifications": false },
+  "skills": [
+    {
+      "id": "recommend",
+      "name": "Generate Recommendation",
+      "description": "Produce PRICE_DECREASE / PRICE_INCREASE / HOLD / HOLD_REORDER actions",
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "authentication": { "schemes": ["bearer"], "credentials": "azure-entra-token" }
+}

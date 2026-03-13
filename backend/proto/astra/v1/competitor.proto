@@ -1,0 +1,35 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/api/annotations.proto";
+
+service CompetitorService {
+  rpc ListCompetitors(ListCompetitorsRequest) returns (ListCompetitorsResponse) {
+    option (google.api.http) = { get: "/api/v1/competitors" };
+  }
+  rpc GetCompetitor(GetCompetitorRequest) returns (Competitor) {
+    option (google.api.http) = { get: "/api/v1/competitors/{id}" };
+  }
+}
+
+message Competitor {
+  string id = 1;
+  string comp_name = 2;
+  string platform = 3;
+  string store_url = 4;
+}
+
+message ListCompetitorsRequest {
+  string platform_filter = 1;
+}
+
+message ListCompetitorsResponse {
+  repeated Competitor competitors = 1;
+  int32 total = 2;
+}
+
+message GetCompetitorRequest {
+  string id = 1;
+}

@@ -1,0 +1,36 @@
+syntax = "proto3";
+package astra.v1;
+
+option go_package = "github.com/astra/backend/gen/astra/v1;astrav1";
+
+import "google/api/annotations.proto";
+import "astra/v1/sku.proto";
+
+service InsightsService {
+  rpc GetSummary(GetSummaryRequest) returns (AISummary) {
+    option (google.api.http) = { get: "/api/v1/insights/summary" };
+  }
+  rpc StreamAlerts(StreamAlertsRequest) returns (stream Alert) {}
+}
+
+message AISummary {
+  AggregatedCounts counts = 1;
+  repeated string insights = 2;
+  string generated_at = 3;
+}
+
+message Alert {
+  string id = 1;
+  string severity = 2;
+  string message = 3;
+  string sku_id = 4;
+  string timestamp = 5;
+}
+
+message GetSummaryRequest {
+  bool force_refresh = 1;
+}
+
+message StreamAlertsRequest {
+  string severity_filter = 1;
+}
