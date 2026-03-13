@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, createContext, useContext } from "react";
+import { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // THEME CONTEXT
@@ -639,7 +639,7 @@ function Dashboard({skus,setSelected,selected,tickets,audit}){
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SKU DRAWER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function SKUDrawer({sku,onClose,onAction,poOn,waOn,approved,ticketed}){
+function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,approved,ticketed}){
   const t=useT();
   const [evid,setEvid]=useState(false);
   const [rationale,setRationale]=useState(null);
@@ -661,7 +661,13 @@ function SKUDrawer({sku,onClose,onAction,poOn,waOn,approved,ticketed}){
     confidence:sku.recConfidence,
   }:localRec;
 
-  // Fetch real LLM rationale when evidence is opened
+  const prevRunning=useRef(skuAgentRunning);
+  useEffect(()=>{
+    if(prevRunning.current&&!skuAgentRunning){setRationale(null);}
+    prevRunning.current=skuAgentRunning;
+  },[skuAgentRunning]);
+
+  // Fetch real LLM rationale when evidence is opened or after agent run
   useEffect(()=>{
     if(!evid||rationale!==null)return;
     setRationaleLoading(true);
@@ -673,7 +679,7 @@ function SKUDrawer({sku,onClose,onAction,poOn,waOn,approved,ticketed}){
       })
       .catch(()=>setRationale(false))
       .finally(()=>setRationaleLoading(false));
-  },[evid]);
+  },[evid,rationale]);
 
   const gap=sku.comp?(sku.own-sku.comp)/sku.comp:0;
 
@@ -701,7 +707,18 @@ function SKUDrawer({sku,onClose,onAction,poOn,waOn,approved,ticketed}){
         </div>
         <div style={{fontFamily:"monospace",fontSize:11,color:t.t3,marginTop:3}}>{sku.id} · {sku.conf==="low"?"⚠ Low confidence":"High confidence"}</div>
       </div>
-      <button onClick={onClose} style={{background:"none",border:"none",color:t.t2,fontSize:18,cursor:"pointer",padding:4}}>✕</button>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <button onClick={()=>onRunAgent(sku)} disabled={skuAgentRunning} style={{
+          display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:6,
+          border:`1px solid ${t.bdr}`,background:skuAgentRunning?t.surf2:t.surf,
+          color:skuAgentRunning?t.t3:t.pri,fontSize:11,fontWeight:600,
+          cursor:skuAgentRunning?"not-allowed":"pointer",opacity:skuAgentRunning?.6:1}}>
+          {skuAgentRunning?<><span style={{display:"inline-block",width:10,height:10,border:"2px solid rgba(37,99,235,.3)",
+            borderTop:"2px solid #2563EB",borderRadius:"50%",animation:"spin .8s linear infinite"}}/>Running…</>
+            :<>▶ Run Agent</>}
+        </button>
+        <button onClick={onClose} style={{background:"none",border:"none",color:t.t2,fontSize:18,cursor:"pointer",padding:4}}>✕</button>
+      </div>
     </div>
     {/* Body */}
     <div style={{flex:1,overflowY:"auto",padding:16}}>
@@ -1179,6 +1196,7 @@ export default function App(){
   const [notifOpen,setNotifOpen]=useState(false);
   const [lastSync,setLastSync]=useState(null);
   const [agentRunning,setAgentRunning]=useState(false);
+  const [skuAgentRunning,setSkuAgentRunning]=useState(false);
 
   // Rebuild SKUs when thresholds change (local fallback)
   useEffect(()=>{setSkus(buildSKUs(thresholds));},[ thresholds]);
@@ -1301,6 +1319,42 @@ export default function App(){
     }
   };
 
+  const handleRunAgentForSku=async(sku)=>{
+    const skuId=sku.cosmosId||sku.id;
+    setSkuAgentRunning(true);
+    toast(`▶ Running agents for ${sku.name}…`,"info");
+    try{
+      const res=await fetch("/api/v1/agents/run",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({sku_ids:[skuId]})});
+      if(!res.ok){toast("Failed to start agent for SKU","warn");setSkuAgentRunning(false);return;}
+      const {jobId}=await res.json();
+      for(let i=0;i<40;i++){
+        await new Promise(r=>setTimeout(r,3000));
+        try{
+          const sr=await fetch(`/api/v1/agents/status/${jobId}`);
+          if(!sr.ok)continue;
+          const job=await sr.json();
+          if(job.status==="completed"){
+            toast(`✅ Agent complete for ${sku.name} — refreshing`,"ok");
+            await refreshAll();
+            setSkuAgentRunning(false);
+            return;
+          }
+          if(job.status==="failed"){
+            toast(`Agent failed for ${sku.name}: ${job.error||"unknown"}`,"warn");
+            setSkuAgentRunning(false);
+            return;
+          }
+        }catch{}
+      }
+      toast("Agent run timed out for SKU","warn");
+      setSkuAgentRunning(false);
+    }catch{
+      toast("Error triggering agent for SKU","warn");
+      setSkuAgentRunning(false);
+    }
+  };
+
   const handleMarkAllRead=()=>{
     setNotifications(ns=>ns.map(n=>({...n,read:true})));
     setUnreadCount(0);
@@ -1401,6 +1455,7 @@ export default function App(){
         <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.3)"}}/> 
         <div style={{position:"absolute",right:0,top:0,height:"100%"}} onClick={e=>e.stopPropagation()}>
           <SKUDrawer sku={selected} onClose={()=>setSelected(null)} onAction={handleAction}
+            onRunAgent={handleRunAgentForSku} skuAgentRunning={skuAgentRunning}
             poOn={poOn} waOn={waOn} approved={approved.has(selected.id)} ticketed={ticketed.has(selected.id)}/>
         </div>
       </div>}
