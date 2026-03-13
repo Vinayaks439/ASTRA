@@ -18,7 +18,7 @@ from shared.config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
-from shared.mcp.cosmos_client import query_settings, write_audit
+from shared.mcp.client import query_settings
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
             data = part.data if isinstance(part.data, dict) else {}
 
     tickets = data.get("tickets", [])
-    settings = query_settings()
+    settings = await query_settings()
 
     whatsapp_enabled = (settings or {}).get("whatsappEnabled", False)
     phone = (settings or {}).get("whatsappNumber", "")

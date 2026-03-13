@@ -10,7 +10,7 @@ A full-stack intelligent supply-chain command center that monitors SKU pricing, 
 | **Backend** | Go 1.22+, gRPC, protobuf, gRPC-Gateway (REST) | Azure AKS (Go container) |
 | **AI Agents** | Python 3.12, Microsoft Agent Framework, A2A protocol | Azure Functions (Durable) / Local via uvicorn |
 | **LLM** | Azure OpenAI (GPT-4o-mini) | Azure AI Foundry (East US 2) |
-| **MCP Tools** | Cosmos DB MCP wrappers (read/write per container) | In-process (agents) |
+| **MCP Server** | FastMCP 3.x (SSE transport), 13 Cosmos DB tools | Local (:6060) / Azure Container Apps |
 | **Database** | Azure Cosmos DB (NoSQL API, Serverless) | Azure Cosmos DB |
 | **Messaging** | Azure Service Bus (planned) / A2A over HTTP (current) | Azure PaaS / Local |
 | **Observability** | OpenTelemetry, Azure Monitor, Application Insights | Azure PaaS |
@@ -22,6 +22,7 @@ sequenceDiagram
     participant User
     participant FE as Frontend :9002
     participant BE as Go Backend :8080
+    participant MCP as MCP Server :6060
     participant RA as Risk Agent :7071
     participant RC as Rec Agent :7072
     participant TR as Triage Agent :7073
@@ -38,31 +39,40 @@ sequenceDiagram
     Note over BE,RA: Phase 1: Risk Cascade
     loop For each SKU
         BE->>RA: A2A tasks/send {sku_id}
-        RA->>DB: Read snapshots (own + competitor)
+        RA->>MCP: call_tool("query_own_snapshots")
+        MCP->>DB: Read snapshots (own + competitor)
         RA->>RA: Compute risk scores (deterministic)
-        RA->>DB: Write risk-scores
+        RA->>MCP: call_tool("write_risk_scores")
+        MCP->>DB: Upsert risk-scores
         RA->>RC: A2A cascade
-        RC->>DB: Read SKUs + settings
+        RC->>MCP: call_tool("query_skus") + call_tool("query_settings")
+        MCP->>DB: Read SKUs + settings
         RC->>RC: Decision matrix → action
-        RC->>DB: Write recommendations
+        RC->>MCP: call_tool("write_recommendation")
+        MCP->>DB: Upsert recommendations
         RC->>TR: A2A cascade
-        TR->>DB: Write tickets + audit-log
+        TR->>MCP: call_tool("write_ticket") + call_tool("write_audit")
+        MCP->>DB: Write tickets + audit-log
         TR->>NT: A2A cascade
     end
 
     Note over BE,RT: Phase 2: LLM Rationale
     loop For each SKU
         BE->>RT: A2A tasks/send {sku_id}
-        RT->>DB: Read SKU + risk + recommendation
+        RT->>MCP: call_tool("query_risk_scores") etc.
+        MCP->>DB: Read SKU + risk + recommendation
         RT->>LLM: Generate explanation (GPT-4o-mini)
-        RT->>DB: Write agent-decisions
+        RT->>MCP: call_tool("write_agent_decision")
+        MCP->>DB: Upsert agent-decisions
     end
 
     Note over BE,IN: Phase 3: LLM Insights
     BE->>IN: A2A tasks/send
-    IN->>DB: Read all risks + tickets
+    IN->>MCP: call_tool("query_skus") etc.
+    MCP->>DB: Read all risks + tickets
     IN->>LLM: Generate 3 insights (GPT-4o-mini)
-    IN->>DB: Write agent-decisions
+    IN->>MCP: call_tool("write_agent_decision")
+    MCP->>DB: Upsert agent-decisions
 
     FE->>BE: GET /api/v1/agents/status/{jobId}
     BE-->>FE: {status: "completed"}
@@ -72,6 +82,8 @@ sequenceDiagram
 ## Agent Architecture
 
 ASTRA uses 6 specialized Python agents that communicate via the **A2A (Agent-to-Agent) protocol** — JSON-RPC 2.0 over HTTP. Each agent runs as a FastAPI server and exposes `/.well-known/agent.json` for discovery and `/a2a` for task execution.
+
+All database operations go through a **real MCP (Model Context Protocol) server** — a FastMCP 3.x SSE server on port 6060 that exposes 13 Cosmos DB tools. Agents connect as MCP clients and call tools like `query_skus`, `write_risk_scores`, etc. over the protocol, rather than importing SDK functions directly.
 
 ### Agent Pipeline
 
@@ -91,9 +103,15 @@ ASTRA uses 6 specialized Python agents that communicate via the **A2A (Agent-to-
               │                          │            │
               │                    Notification       │
               │                        :7076          │
-              └──────────────────────────┬────────────┘
-                                         │
-              ┌──────────────────────────▼────────────┐
+              └───────────────┬────────────┬──────────┘
+                              │            │
+              ┌───────────────▼────────────▼──────────┐
+              │  MCP Cosmos DB Server :6060 (SSE)     │
+              │  13 tools (query_* + write_*)         │
+              │  FastMCP 3.x → azure-cosmos SDK       │
+              └───────────────┬───────────────────────┘
+                              │
+              ┌───────────────▼───────────────────────┐
               │  Phase 2: Rationale (per SKU, LLM)   │
               │  Rationale Agent :7074                │
               │  → Azure OpenAI GPT-4o-mini           │
@@ -116,6 +134,56 @@ ASTRA uses 6 specialized Python agents that communicate via the **A2A (Agent-to-
 | 4 | **Rationale** | 7074 | GPT-4o-mini | Read: SKU, risk, rec. Write: `agent-decisions` | LLM-generated natural language explanation per SKU |
 | 5 | **Insights** | 7075 | GPT-4o-mini | Read: risks, tickets. Write: `agent-decisions` | LLM-generated portfolio-level insights (3 sentences) |
 | 6 | **Notification** | 7076 | GPT-4o-mini | Read: settings | WhatsApp message composition (planned) |
+
+### MCP Server (Model Context Protocol)
+
+All agent-to-database communication is routed through a dedicated MCP server running on port 6060. This is a real implementation of the [Model Context Protocol](https://modelcontextprotocol.io/) using [FastMCP 3.x](https://gofastmcp.com/) — the same framework recommended by Microsoft in their [Azure MCP tutorials](https://learn.microsoft.com/en-us/azure/app-service/tutorial-ai-model-context-protocol-server-python).
+
+```mermaid
+graph LR
+  subgraph mcpServer ["MCP Server :6060"]
+    SSE["FastMCP SSE Transport"]
+    Tools["13 Cosmos DB Tools"]
+    SSE --- Tools
+  end
+
+  subgraph agents ["Agents :7071-7076"]
+    A1["risk_assessment"]
+    A2["recommendation"]
+    A3["exception_triage"]
+    A4["rationale"]
+    A5["insights"]
+    A6["notification"]
+  end
+
+  A1 -->|"MCP call_tool"| SSE
+  A2 -->|"MCP call_tool"| SSE
+  A3 -->|"MCP call_tool"| SSE
+  A4 -->|"MCP call_tool"| SSE
+  A5 -->|"MCP call_tool"| SSE
+  A6 -->|"MCP call_tool"| SSE
+
+  Tools -->|"azure-cosmos SDK"| DB["Azure Cosmos DB"]
+```
+
+| Category | Tool | Description |
+|---|---|---|
+| Read | `query_skus` | SKU catalog, filterable by category |
+| Read | `query_competitors` | Competitor profiles, filterable by platform |
+| Read | `query_own_snapshots` | Own price/stock/velocity (daily/weekly/monthly) |
+| Read | `query_comp_snapshots` | Competitor price snapshots |
+| Read | `query_risk_scores` | Computed risk scores per SKU |
+| Read | `query_tickets` | Exception tickets, filterable by status |
+| Read | `query_settings` | Seller thresholds and preferences |
+| Read | `query_recommendations` | Generated pricing recommendations |
+| Read | `query_audit` | Audit log entries |
+| Write | `write_risk_scores` | Upsert risk score document |
+| Write | `write_recommendation` | Upsert recommendation |
+| Write | `write_ticket` | Create/update exception ticket |
+| Write | `write_audit` | Create audit log entry |
+| Write | `write_agent_decision` | Persist LLM rationale or insights |
+
+The MCP server is started automatically by `run_local.py` before the agents. It uses the `azure-cosmos` Python SDK internally, with the Cosmos DB connection configured via environment variables.
 
 ### What Makes It Real
 
@@ -179,15 +247,18 @@ ASTRA/
 ├── agents/                      # Python AI agents (6)
 │   ├── shared/
 │   │   ├── a2a/                 # A2A protocol (server, client, models)
-│   │   ├── mcp/                 # MCP Cosmos DB tools (query + write per container)
-│   │   └── config.py            # Loads .env, exports all config
+│   │   ├── mcp/
+│   │   │   ├── server.py        # FastMCP SSE server — 13 Cosmos DB tools (port 6060)
+│   │   │   ├── client.py        # Async MCP client — convenience wrappers for agents
+│   │   │   └── cosmos_client.py # Underlying azure-cosmos SDK implementation
+│   │   └── config.py            # Loads .env, exports all config (incl. MCP_SERVER_URL)
 │   ├── risk_assessment/         # Agent 1: Deterministic risk scoring
 │   ├── recommendation/          # Agent 2: Decision matrix
 │   ├── exception_triage/        # Agent 3: Guardrail enforcement
 │   ├── rationale/               # Agent 4: LLM explanations (GPT-4o-mini)
 │   ├── insights/                # Agent 5: LLM portfolio insights (GPT-4o-mini)
 │   ├── notification/            # Agent 6: WhatsApp message composition
-│   ├── run_local.py             # Starts all 6 agents via multiprocessing
+│   ├── run_local.py             # Starts MCP server + all 6 agents via multiprocessing
 │   ├── requirements.txt
 │   └── .env                     # Cosmos DB + Azure OpenAI + agent URLs
 │
@@ -262,11 +333,12 @@ EXCEPTION_AGENT_URL=http://localhost:7073
 RATIONALE_AGENT_URL=http://localhost:7074
 INSIGHTS_AGENT_URL=http://localhost:7075
 NOTIFICATION_AGENT_URL=http://localhost:7076
+MCP_SERVER_URL=http://localhost:6060/sse
 EOF
 
-# Start all 6 agents (single command)
+# Start MCP server + all 6 agents (single command)
 python run_local.py
-# → 6 agents on ports 7071-7076
+# → MCP server on :6060, 6 agents on :7071-7076
 ```
 
 ### 4. Start the Frontend
