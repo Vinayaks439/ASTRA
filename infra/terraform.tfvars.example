@@ -1,0 +1,9 @@
+project          = "astra"
+environment      = "dev"
+location         = "eastus"
+aks_node_count   = 2
+aks_node_vm_size = "Standard_D2s_v3"
+cosmos_db_name   = "voltedge-pricing-db"
+openai_model     = "gpt-4o-mini"
+openai_deployment = "astra-gpt"
+openai_capacity  = 30

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: astra
+data:
+  GRPC_PORT: "50051"
+  HTTP_PORT: "8080"
+  COSMOS_DATABASE: "voltedge-pricing-db"
+  # Agent URLs - update these with actual Container Apps FQDNs after terraform apply
+  # Example: https://ca-astra-risk-assessment-dev.<cae-default-domain>
+  RISK_AGENT_URL: "https://ca-astra-risk-assessment-dev.REPLACE_WITH_CAE_DOMAIN"
+  RECOMMENDATION_AGENT_URL: "https://ca-astra-recommendation-dev.REPLACE_WITH_CAE_DOMAIN"
+  TRIAGE_AGENT_URL: "https://ca-astra-exception-triage-dev.REPLACE_WITH_CAE_DOMAIN"
+  RATIONALE_AGENT_URL: "https://ca-astra-rationale-dev.REPLACE_WITH_CAE_DOMAIN"
+  INSIGHTS_AGENT_URL: "https://ca-astra-insights-dev.REPLACE_WITH_CAE_DOMAIN"
+  NOTIFICATION_AGENT_URL: "https://ca-astra-notification-dev.REPLACE_WITH_CAE_DOMAIN"
