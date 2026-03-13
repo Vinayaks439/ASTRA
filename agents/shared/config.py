@@ -12,6 +12,8 @@ AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-pre
 
 SERVICEBUS_CONNECTION = os.getenv("SERVICEBUS_CONNECTION", "")
 
+MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:6060/sse")
+
 AGENT_URLS = {
     "risk-assessment": os.getenv("RISK_AGENT_URL", "http://localhost:7071"),
     "recommendation": os.getenv("RECOMMENDATION_AGENT_URL", "http://localhost:7072"),

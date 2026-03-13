@@ -13,7 +13,7 @@ from shared.a2a.client import A2ATaskClient
 from shared.a2a.models import AgentCard, Message, Skill, Task
 from shared.a2a.server import A2AServer, make_completed_task
 from shared.config import AGENT_URLS
-from shared.mcp.cosmos_client import query_settings, query_skus, write_audit, write_ticket
+from shared.mcp.client import query_settings, query_skus, write_audit, write_ticket
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +87,8 @@ async def handle_task(task_id: str, message: Message) -> Task:
     recommendations = data.get("recommendations", [])
     risk_scores = data.get("risk_scores", [])
     risk_map = {r["skuId"]: r for r in risk_scores}
-    settings = query_settings()
-    skus_map = {s["id"]: s for s in query_skus()}
+    settings = await query_settings()
+    skus_map = {s["id"]: s for s in await query_skus()}
 
     results = []
     tickets_created = []
@@ -101,10 +101,10 @@ async def handle_task(task_id: str, message: Message) -> Task:
         if triage["ticket"]:
             sku = skus_map.get(sid, {})
             triage["ticket"]["skuName"] = sku.get("partName", sid)
-            write_ticket(triage["ticket"])
+            await write_ticket(triage["ticket"])
             tickets_created.append(triage["ticket"])
 
-            write_audit({
+            await write_audit({
                 "id": f"AUD-{sid}-{int(datetime.now(timezone.utc).timestamp()*1000)}",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "skuId": sid,
@@ -116,7 +116,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
             })
         else:
             sku = skus_map.get(sid, {})
-            write_audit({
+            await write_audit({
                 "id": f"AUD-{sid}-{int(datetime.now(timezone.utc).timestamp()*1000)}",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "skuId": sid,

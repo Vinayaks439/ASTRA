@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Local runner — starts all 6 ASTRA agents as FastAPI servers.
+"""Local runner — starts the MCP Cosmos server + all 6 ASTRA agents.
 
 Usage:
     cd ASTRA/agents
-    python run_local.py          # starts all agents
-    python run_local.py risk     # starts only risk-assessment agent
+    python run_local.py          # starts MCP server + all agents
+    python run_local.py risk     # starts MCP server + risk-assessment agent only
 """
 from __future__ import annotations
 
 import multiprocessing
 import os
 import sys
+import time
 import logging
 
 from dotenv import load_dotenv
@@ -22,6 +23,8 @@ logging.basicConfig(
     format="%(asctime)s [%(name)-24s] %(levelname)-5s %(message)s",
     datefmt="%H:%M:%S",
 )
+
+MCP_PORT = int(os.getenv("MCP_SERVER_PORT", "6060"))
 
 AGENTS = {
     "risk": {
@@ -61,6 +64,12 @@ AGENTS = {
         "factory": "create_server",
     },
 }
+
+
+def run_mcp_server():
+    """Start the MCP Cosmos DB tool server."""
+    from shared.mcp.server import run_server
+    run_server()
 
 
 def run_agent(key: str, cfg: dict):
@@ -106,9 +115,17 @@ def main():
         print("  ℹ  No Azure OpenAI — agents will use template fallbacks")
 
     print()
-    print(f"  Starting {len(selected)} agent(s):")
 
-    procs = []
+    # Start MCP Cosmos DB tool server first
+    print(f"  ▶ {'mcp-cosmos-server':24s}  http://localhost:{MCP_PORT}/sse")
+    mcp_proc = multiprocessing.Process(target=run_mcp_server, daemon=True)
+    mcp_proc.start()
+    time.sleep(2)
+
+    # Start agent processes
+    print(f"\n  Starting {len(selected)} agent(s):")
+
+    procs = [mcp_proc]
     for key, cfg in selected.items():
         p = multiprocessing.Process(target=run_agent, args=(key, cfg), daemon=True)
         p.start()
@@ -118,7 +135,7 @@ def main():
         for p in procs:
             p.join()
     except KeyboardInterrupt:
-        print("\n  Shutting down agents...")
+        print("\n  Shutting down MCP server + agents...")
         for p in procs:
             p.terminate()
 

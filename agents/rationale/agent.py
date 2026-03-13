@@ -18,7 +18,7 @@ from shared.config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
-from shared.mcp.cosmos_client import (
+from shared.mcp.client import (
     query_own_snapshots,
     query_comp_snapshots,
     query_recommendations,
@@ -143,24 +143,24 @@ async def handle_task(task_id: str, message: Message) -> Task:
     if not sku_id:
         return make_completed_task(task_id, "rationale", {"error": "sku_id required"})
 
-    skus = query_skus()
+    skus = await query_skus()
     sku = next((s for s in skus if s["id"] == sku_id), None)
     if not sku:
         return make_completed_task(task_id, "rationale", {"error": f"SKU {sku_id} not found"})
 
-    risks = query_risk_scores(sku_id)
+    risks = await query_risk_scores(sku_id)
     risk = risks[0] if risks else {}
 
-    recs = query_recommendations(sku_id)
+    recs = await query_recommendations(sku_id)
     rec = recs[0] if recs else {}
 
-    weekly_own = query_own_snapshots(sku_id, "weekly", 8)
-    monthly_comp = query_comp_snapshots(sku_id, "monthly", 6)
+    weekly_own = await query_own_snapshots(sku_id, "weekly", 8)
+    monthly_comp = await query_comp_snapshots(sku_id, "monthly", 6)
 
     rationale = await _generate_llm_rationale(sku, risk, rec, weekly_own, monthly_comp)
 
     try:
-        write_agent_decision({
+        await write_agent_decision({
             "id": f"rationale-{sku_id}",
             "skuId": sku_id,
             "type": "rationale",

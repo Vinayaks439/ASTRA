@@ -36,16 +36,6 @@ bin/
 
 # Go compiled binary (backend)
 ASTRA/backend/server
-=======
-# testing
-/coverage
-/gen/go/*
-/.venv/
-/__pycache__/
-*.pyc
-# next.js
-/.next/
-/out/
 
 # ──────────────────────────────────────────────
 # Go

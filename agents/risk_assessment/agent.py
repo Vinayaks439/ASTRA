@@ -26,7 +26,7 @@ from shared.config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
-from shared.mcp.cosmos_client import (
+from shared.mcp.client import (
     query_comp_snapshots,
     query_own_snapshots,
     query_settings,
@@ -167,22 +167,22 @@ async def handle_task(task_id: str, message: Message) -> Task:
             data = part.data if isinstance(part.data, dict) else {}
 
     sku_ids = data.get("sku_ids", [])
-    settings = query_settings()
+    settings = await query_settings()
 
     if not sku_ids:
-        skus = query_skus()
+        skus = await query_skus()
         sku_ids = [s["id"] for s in skus]
     else:
-        skus = query_skus()
+        skus = await query_skus()
         skus = [s for s in skus if s["id"] in sku_ids]
 
     results = []
     for sku in skus:
         sid = sku["id"]
-        own_snaps = query_own_snapshots(sid, "daily", 30)
-        comp_snaps = query_comp_snapshots(sid, "daily", 30)
+        own_snaps = await query_own_snapshots(sid, "daily", 30)
+        comp_snaps = await query_comp_snapshots(sid, "daily", 30)
         risk = compute_risk(sku, own_snaps, comp_snaps, settings)
-        write_risk_scores(risk)
+        await write_risk_scores(risk)
         results.append(risk)
 
     # Trigger Recommendation Agent via A2A for all assessed SKUs

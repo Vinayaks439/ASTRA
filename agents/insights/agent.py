@@ -18,7 +18,7 @@ from shared.config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
-from shared.mcp.cosmos_client import query_risk_scores, query_skus, query_tickets, write_agent_decision
+from shared.mcp.client import query_risk_scores, query_skus, query_tickets, write_agent_decision
 
 logger = logging.getLogger(__name__)
 
@@ -124,9 +124,9 @@ Each insight should be 1 sentence, actionable, and specific. Format as a JSON ar
 
 async def handle_task(task_id: str, message: Message) -> Task:
     """A2A task handler — generate dashboard insights."""
-    skus = query_skus()
-    risks = query_risk_scores()
-    tickets = query_tickets()
+    skus = await query_skus()
+    risks = await query_risk_scores()
+    tickets = await query_tickets()
 
     insights = await _generate_llm_insights(skus, risks, tickets)
 
@@ -142,7 +142,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
         },
     }
     try:
-        write_agent_decision(decision_doc)
+        await write_agent_decision(decision_doc)
     except Exception as e:
         logger.warning("Failed to persist insights: %s", e)
 

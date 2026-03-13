@@ -17,8 +17,7 @@ from shared.a2a.client import A2ATaskClient
 from shared.a2a.models import AgentCard, Capabilities, Message, Skill, Task
 from shared.a2a.server import A2AServer, make_completed_task
 from shared.config import AGENT_URLS
-from shared.mcp.cosmos_client import (
-    query_own_snapshots,
+from shared.mcp.client import (
     query_settings,
     query_skus,
     write_recommendation,
@@ -96,9 +95,9 @@ async def handle_task(task_id: str, message: Message) -> Task:
 
     risk_scores = data.get("risk_scores", [])
     sku_ids = data.get("sku_ids", [])
-    settings = query_settings()
+    settings = await query_settings()
 
-    skus_map = {s["id"]: s for s in query_skus()}
+    skus_map = {s["id"]: s for s in await query_skus()}
 
     results = []
     for risk in risk_scores:
@@ -107,7 +106,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
         if not sku:
             continue
         rec = generate_recommendation(sku, risk, settings)
-        write_recommendation(rec)
+        await write_recommendation(rec)
         results.append(rec)
 
     # Trigger Exception Triage Agent
