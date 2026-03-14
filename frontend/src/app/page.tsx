@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
@@ -5,7 +6,7 @@ import { useState, useMemo, useEffect, useRef, createContext, useContext } from 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // THEME CONTEXT
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const TC = createContext(null);
+const TC = createContext<any>(null);
 const useT = () => useContext(TC);
 
 const mkTheme = dm => ({
@@ -34,40 +35,12 @@ button{cursor:pointer;}input,select{outline:none;font-family:inherit;}
 .dr{animation:dr .22s cubic-bezier(.22,1,.36,1);}@keyframes dr{from{transform:translateX(100%)}}
 .ti{animation:ti .28s cubic-bezier(.22,1,.36,1);}@keyframes ti{from{opacity:0;transform:translateY(-10px)}}
 .fi{animation:fi .18s ease;}@keyframes fi{from{opacity:0;transform:translateY(-3px)}}
-@keyframes spin{to{transform:rotate(360deg)}}`;
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// RISK ENGINE — exact PRD formulas
+// THRESHOLDS + AGENT EVALUATION
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const clamp = (v,a,b)=>Math.min(Math.max(v,a),b), rnd = v=>Math.round(v);
-
-const calcPG = (own,comp)=>{
-  if(!comp) return {s:null,conf:"low",note:"No competitor data"};
-  const u=Math.max(0,(own-comp)/own);
-  return {s:rnd(clamp(u/0.2,0,1)*30),conf:"high",undo:rnd(u*100)};
-};
-const calcSC = (onH,inb,vel)=>{
-  if(vel<=0) return onH===0?{s:30,conf:"low",doc:0,note:"Zero stock"}:{s:3,conf:"low",doc:999,note:"No velocity"};
-  const doc=(onH+(inb||0))/vel;
-  return {s:rnd((1-clamp(doc/60,0,1))*30),conf:"high",doc:Math.round(doc*10)/10};
-};
-const calcDT = (v7,v14)=>{
-  if(!v14||v14<=0) return {s:v7>0?14:10,conf:"low",note:"No baseline"};
-  const chg=(v7-v14)/v14;
-  return {s:rnd((clamp(chg,-0.5,0.5)+0.5)*20),conf:"high",chgPct:rnd(chg*100)};
-};
-const calcMP = (mPct,flPct)=>{
-  const buf=mPct-flPct;
-  if(buf<=0) return {s:20,conf:"high",note:"At/below floor"};
-  const ratio=buf/flPct;
-  return {s:rnd((1-clamp(ratio/0.5,0,1))*20),conf:"high",bufPct:rnd(ratio*100)};
-};
-const getBand = s=>s>=75?"CRITICAL":s>=40?"WARNING":"HEALTHY";
-const getTopDriver = b=>[
-  {n:"Stock Coverage",s:b.sc,m:30},{n:"Price Gap",s:b.pg??0,m:30},
-  {n:"Margin Proximity",s:b.mp,m:20},{n:"Demand Trend",s:b.dt,m:20}
-].sort((a,z)=>(z.s/z.m)-(a.s/a.m))[0].n;
-
 const DEF_TH={pg:24,sc:24,dt:16,mp:16};
 
 const evalAgent=(b,th)=>{
@@ -77,108 +50,6 @@ const evalAgent=(b,th)=>{
   if(b.dt>th.dt) br.push(`Demand Trend (${b.dt}>${th.dt}/20)`);
   if(b.mp>th.mp) br.push(`Margin Proximity (${b.mp}>${th.mp}/20)`);
   return {auto:!br.length,breaches:br};
-};
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// RECOMMENDATION ENGINE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const genRec=(sku)=>{
-  const {own,comp,mPct,mFloor,doc,vel,vendor,moq}=sku;
-  const gap=comp?(own-comp)/comp:0;
-  const rQty=Math.max(moq,Math.ceil(vel*30/moq)*moq);
-  const lowStock=doc<14;
-  const guards=[
-    {lbl:"Within ±30% price corridor",ok:!comp||Math.abs(gap)<=0.3},
-    {lbl:"Above margin floor",ok:mPct>mFloor},
-    {lbl:"Low-stock discount block",ok:!lowStock||gap<=0.05,warn:lowStock&&gap>0.05,
-     note:lowStock&&gap>0.05?`${doc}d cover — decrease blocked`:null},
-    {lbl:"Cooldown period respected",ok:true},
-  ];
-  let action,title,rationale,impact;
-  if(lowStock&&gap>0.05){
-    action="HOLD_REORDER"; title="HOLD PRICE + SEND PO";
-    rationale=`Stock critically low (${doc}d). Discounting now accelerates sell-out before replenishment. Hold at ₹${own.toLocaleString()} and reorder ${rQty} units from ${vendor}.`;
-    impact=`Prevents ~₹${Math.round(vel*12*own*.1/1000)}K stockout loss`;
-  } else if(gap>0.08){
-    const nP=Math.round(own*.9);
-    action="PRICE_DECREASE"; title=`LOWER PRICE  ₹${own.toLocaleString()} → ₹${nP.toLocaleString()}`;
-    rationale=`Competitor at ₹${comp?.toLocaleString()} (${Math.round(gap*100)}% below). Reducing improves Buy Box eligibility without breaching margin floor.`;
-    impact=`+${Math.round(vel*.25)} units/day estimated uplift`;
-  } else if(gap<-0.06){
-    const nP=Math.round(own*1.06);
-    action="PRICE_INCREASE"; title=`RAISE PRICE  ₹${own.toLocaleString()} → ₹${nP.toLocaleString()}`;
-    rationale=`Your price is ${Math.round(Math.abs(gap)*100)}% below market. Incremental increase captures margin without significant conversion impact.`;
-    impact=`+₹${Math.round((nP-own)*vel*30/1000)}K/mo margin gain`;
-  } else{
-    action="HOLD"; title="HOLD CURRENT PRICE";
-    rationale="Price is competitive (within ±8% of market). Monitor demand and reassess in 24h.";
-    impact="Maintain current revenue trajectory";
-  }
-  return {action,title,rationale,impact,guards,needsPO:doc<14,reorderQty:rQty};
-};
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MOCK DATA
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const RAW=[
-  {id:"SKU-A001",name:"Running Shoes X200",     own:1299,comp:895, onH:12, vel:7, v7:11,v14:7, mPct:.155,mFl:.15,vend:"SupplierCo", moq:50, lt:7},
-  {id:"SKU-B012",name:"Wireless Earbuds Pro",   own:1499,comp:999, onH:8,  vel:5, v7:8, v14:5, mPct:.14, mFl:.15,vend:"TechSupply", moq:30, lt:10},
-  {id:"SKU-C033",name:"USB-C Hub 7-in-1",       own:899, comp:849, onH:5,  vel:4, v7:6, v14:4, mPct:.21, mFl:.15,vend:"GadgetWorld",moq:100,lt:14},
-  {id:"SKU-D044",name:"Phone Case Galaxy S25",  own:499, comp:450, onH:45, vel:8, v7:10,v14:8, mPct:.18, mFl:.15,vend:"CaseMate",  moq:200,lt:5},
-  {id:"SKU-E055",name:"Yoga Mat Premium",       own:1799,comp:1750,onH:60, vel:3, v7:4, v14:3, mPct:.162,mFl:.15,vend:"FitGear Co",moq:25, lt:12},
-  {id:"SKU-F066",name:"LED Desk Lamp Pro",      own:649, comp:620, onH:38, vel:4, v7:7, v14:4, mPct:.19, mFl:.15,vend:"LightPro",  moq:50, lt:8},
-  {id:"SKU-G077",name:"Protein Powder Vanilla", own:2199,comp:2350,onH:310,vel:9, v7:8, v14:9, mPct:.28, mFl:.15,vend:"NutriSupply",moq:20,lt:4},
-  {id:"SKU-H088",name:"Mechanical Keyboard TKL",own:3499,comp:3800,onH:75, vel:2, v7:2, v14:2, mPct:.32, mFl:.15,vend:"KeyTech",   moq:10, lt:21},
-  {id:"SKU-I099",name:"Resistance Bands Set",   own:549, comp:499, onH:90, vel:6, v7:7, v14:6, mPct:.17, mFl:.15,vend:"FitGear Co",moq:100,lt:7},
-  {id:"SKU-J100",name:"Water Bottle Insulated", own:799, comp:820, onH:200,vel:5, v7:5, v14:5, mPct:.25, mFl:.15,vend:"HydroStore",moq:50, lt:10},
-];
-
-const buildSKUs=(th=DEF_TH)=>RAW.map(r=>{
-  const pg=calcPG(r.own,r.comp), sc=calcSC(r.onH,0,r.vel), dt=calcDT(r.v7,r.v14), mp=calcMP(r.mPct,r.mFl);
-  const b={pg:pg.s,sc:sc.s,dt:dt.s,mp:mp.s};
-  const composite=(b.pg??0)+b.sc+b.dt+b.mp;
-  const agent=evalAgent({...b,pg:b.pg??0},th);
-  const conf=[pg.conf,sc.conf,dt.conf,mp.conf].includes("low")?"low":"high";
-  return {...r,vendor:r.vend,mFloor:r.mFl,doc:sc.doc,b,composite,
-    band:getBand(composite),topDriver:getTopDriver(b),agent,conf};
-});
-
-// Pre-existing tickets for demo
-const INIT_TICKETS=[
-  {id:"TK-001",skuId:"SKU-A001",skuName:"Running Shoes X200",action:"HOLD PRICE + SEND PO",
-   breaches:["Price Gap (30>24/30)","Stock Coverage (29>24/30)","Demand Trend (20>16/20)","Margin Proximity (19>16/20)"],
-   composite:98,band:"CRITICAL",status:"OPEN",ts:"Today, 08:42 AM",wa:"pending"},
-  {id:"TK-002",skuId:"SKU-B012",skuName:"Wireless Earbuds Pro",action:"LOWER PRICE ₹1,499 → ₹1,349",
-   breaches:["Price Gap (30>24/30)","Stock Coverage (29>24/30)","Margin Proximity (20>16/20)"],
-   composite:99,band:"CRITICAL",status:"OPEN",ts:"Today, 08:45 AM",wa:"pending"},
-  {id:"TK-003",skuId:"SKU-D044",skuName:"Phone Case Galaxy S25",action:"LOWER PRICE ₹499 → ₹449",
-   breaches:["Stock Coverage (26>24/30)"],
-   composite:68,band:"WARNING",status:"APPROVED",ts:"Yesterday, 3:10 PM",wa:"sent"},
-];
-
-const INIT_AUDIT=[
-  {id:1,ts:"Today, 09:02 AM",skuId:"SKU-G077",skuName:"Protein Powder Vanilla",action:"HOLD CURRENT PRICE",type:"AUTONOMOUS",wa:"sent"},
-  {id:2,ts:"Yesterday, 2:45 PM",skuId:"SKU-H088",skuName:"Mechanical Keyboard TKL",action:"RAISE PRICE ₹3,499→₹3,709",type:"AUTONOMOUS",wa:"sent"},
-  {id:3,ts:"Yesterday, 3:10 PM",skuId:"SKU-D044",skuName:"Phone Case Galaxy S25",action:"TICKET APPROVED → Executing",type:"TICKET",wa:"sent"},
-];
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// AI SUMMARY
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const fetchSummary=async(metrics)=>{
-  const m=metrics;
-  const prompt=`You are a concise seller operations assistant. Write exactly 3 short, action-focused insights (max 18 words each) from these metrics. Format: one insight per line, each starting with "•". No headers, no intro.
-
-Data: ${m.critical} critical SKUs, ${m.warning} warning, ${m.healthy} healthy. Top risk driver: ${m.topDriver?.[0]} (${m.topDriver?.[1]} SKUs). ${m.autoActions} autonomous actions executed. ${m.openTickets} exception tickets need approval. Avg risk: ${m.avgRisk}/100.`;
-  try{
-    const r=await fetch("https://api.anthropic.com/v1/messages",{
-      method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:200,
-        messages:[{role:"user",content:prompt}]})
-    });
-    const d=await r.json();
-    return d.content?.[0]?.text||null;
-  }catch{return null;}
 };
 
 const computeMetrics=(skus,tickets,audit)=>{
@@ -256,6 +127,16 @@ const NInput=({value,onChange,min,max,suffix,label})=>{
         background:t.surf2,color:t.t1,fontSize:13,textAlign:"right"}}/>
     {suffix&&<span style={{fontSize:12,color:t.t3}}>{suffix}</span>}
   </div>;
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SKELETON
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const Sk=({w="100%",h=14,r=6,style:sx={}}:{w?:any,h?:number,r?:number,style?:any})=>{
+  const t=useT();
+  return <div style={{width:w,height:h,borderRadius:r,flexShrink:0,
+    background:`linear-gradient(90deg,${t.bdr} 25%,${t.surf2} 50%,${t.bdr} 75%)`,
+    backgroundSize:"200% 100%",animation:"shimmer 1.6s ease-in-out infinite",...sx}}/>;
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -501,7 +382,7 @@ function AISummaryPanel({skus,tickets,audit}){
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // DASHBOARD
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function Dashboard({skus,setSelected,selected,tickets,audit}){
+function Dashboard({skus,setSelected,selected,tickets,audit,loading}){
   const t=useT();
   const [q,setQ]=useState(""),  [f,setF]=useState("ALL"),
         [col,setCol]=useState("composite"), [dir,setDir]=useState("desc"),
@@ -632,9 +513,18 @@ function Dashboard({skus,setSelected,selected,tickets,audit}){
               </tr>
             );
           })}
+          {loading&&Array.from({length:8}).map((_,i)=>(
+            <tr key={i} style={{borderBottom:`1px solid ${t.bdr}`}}>
+              <td style={{padding:"13px 12px"}}><Sk h={13} w={140}/><Sk h={10} w={80} style={{marginTop:5}}/></td>
+              <td style={{padding:"13px 12px"}}><Sk h={13} w={110}/></td>
+              {[0,1,2,3].map(j=><td key={j} style={{padding:"13px 12px",textAlign:"center" as const}}><Sk h={13} w={32} style={{margin:"0 auto"}}/></td>)}
+              <td style={{padding:"13px 12px",textAlign:"center" as const}}><Sk h={22} w={60} r={99} style={{margin:"0 auto"}}/></td>
+              <td style={{padding:"13px 12px",textAlign:"center" as const}}><Sk h={26} w={70} r={6} style={{margin:"0 auto"}}/></td>
+            </tr>
+          ))}
         </tbody>
       </table>
-      {rows.length===0&&<div style={{padding:48,textAlign:"center",color:t.t3}}>
+      {!loading&&rows.length===0&&<div style={{padding:48,textAlign:"center",color:t.t3}}>
         <div style={{fontSize:32,marginBottom:8}}>🔍</div>
         <div style={{fontSize:13}}>No SKUs match your filters</div>
         <button onClick={()=>{setQ("");setF("ALL");}} style={{color:t.pri,fontSize:12,marginTop:8,background:"none",border:"none",cursor:"pointer"}}>Clear filters</button>
@@ -649,11 +539,8 @@ function Dashboard({skus,setSelected,selected,tickets,audit}){
 function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,approved,ticketed}){
   const t=useT();
   const [evid,setEvid]=useState(false);
-  const [rationale,setRationale]=useState(null);
+  const [rationale,setRationale]=useState<any>(null);
   const [rationaleLoading,setRationaleLoading]=useState(false);
-  const localRec=useMemo(()=>genRec(sku),[sku]);
-
-  // Use real agent recommendation if available, otherwise fall back to local computation
   const hasAgentRec=!!sku.recAction;
   const rec=hasAgentRec?{
     action:sku.recAction,
@@ -661,12 +548,9 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
       :sku.recAction==="PRICE_INCREASE"?`RAISE PRICE ₹${sku.own.toLocaleString()} → ₹${sku.recPrice.toLocaleString()}`
       :sku.recAction==="HOLD_REORDER"?"HOLD PRICE + SEND PO":"HOLD CURRENT PRICE",
     rationale:sku.recRationale,
-    impact:localRec.impact,
-    guards:localRec.guards,
     needsPO:sku.recAction==="HOLD_REORDER",
-    reorderQty:localRec.reorderQty,
     confidence:sku.recConfidence,
-  }:localRec;
+  }:null;
 
   const prevRunning=useRef(skuAgentRunning);
   useEffect(()=>{
@@ -690,14 +574,14 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
 
   const gap=sku.comp?(sku.own-sku.comp)/sku.comp:0;
 
-  const cardBg=rec.action==="PRICE_DECREASE"?t.critBg
-    :rec.action==="PRICE_INCREASE"?t.goodBg
-    :rec.action==="HOLD_REORDER"?t.warnBg:t.surf2;
-  const cardBd=rec.action==="PRICE_DECREASE"?t.critBd
-    :rec.action==="PRICE_INCREASE"?t.goodBd
-    :rec.action==="HOLD_REORDER"?t.warnBd:t.bdr;
+  const cardBg=rec?.action==="PRICE_DECREASE"?t.critBg
+    :rec?.action==="PRICE_INCREASE"?t.goodBg
+    :rec?.action==="HOLD_REORDER"?t.warnBg:t.surf2;
+  const cardBd=rec?.action==="PRICE_DECREASE"?t.critBd
+    :rec?.action==="PRICE_INCREASE"?t.goodBd
+    :rec?.action==="HOLD_REORDER"?t.warnBd:t.bdr;
 
-  const actionEmoji=rec.action==="PRICE_DECREASE"?"📉":rec.action==="PRICE_INCREASE"?"📈":rec.action==="HOLD_REORDER"?"📦":"➖";
+  const actionEmoji=rec?.action==="PRICE_DECREASE"?"📉":rec?.action==="PRICE_INCREASE"?"📈":rec?.action==="HOLD_REORDER"?"📦":"➖";
 
   return <div className="dr" style={{position:"absolute",right:0,top:0,height:"100%",
     width:464,background:t.surf,boxShadow:t.sh2,display:"flex",flexDirection:"column",
@@ -798,32 +682,18 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
         <span style={{fontSize:11,fontWeight:700,color:t.t3,textTransform:"uppercase",letterSpacing:".05em"}}>Recommendation</span>
         {hasAgentRec&&<span style={{fontSize:10,color:t.good,background:t.goodBg,border:`1px solid ${t.goodBd}`,
           padding:"1px 6px",borderRadius:99}}>Agent</span>}
-        {!hasAgentRec&&<span style={{fontSize:10,color:t.t3,background:t.surf2,border:`1px solid ${t.bdr}`,
-          padding:"1px 6px",borderRadius:99}}>Local</span>}
       </div>
-      <div style={{background:cardBg,border:`1px solid ${cardBd}`,borderRadius:12,padding:14,marginBottom:12}}>
+      {!rec&&<div style={{background:t.surf2,border:`1px solid ${t.bdr}`,borderRadius:12,padding:24,marginBottom:12,textAlign:"center"}}>
+        <div style={{fontSize:22,marginBottom:8}}>🤖</div>
+        <div style={{fontSize:13,color:t.t2,marginBottom:4}}>No recommendation yet</div>
+        <div style={{fontSize:11,color:t.t3}}>Run agents to generate a pricing recommendation for this SKU.</div>
+      </div>}
+      {rec&&<div style={{background:cardBg,border:`1px solid ${cardBd}`,borderRadius:12,padding:14,marginBottom:12}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:10}}>
           <span style={{fontSize:16}}>{actionEmoji}</span>
           <span style={{fontSize:13,fontWeight:700,color:t.t1,lineHeight:1.4}}>{rec.title}</span>
         </div>
-        <p style={{fontSize:13,color:t.t2,lineHeight:1.6,marginBottom:10}}>{rec.rationale}</p>
-        {/* Guardrails */}
-        <div style={{background:t.surf,borderRadius:10,padding:12,marginBottom:10}}>
-          <div style={{fontSize:11,fontWeight:700,color:t.t3,marginBottom:8}}>🛡 GUARDRAIL CHECKS</div>
-          {rec.guards.map(g=>(
-            <div key={g.lbl} style={{display:"flex",gap:8,marginBottom:5,fontSize:12}}>
-              <span style={{flexShrink:0}}>{g.ok&&!g.warn?"✅":g.warn?"⚠️":"🚫"}</span>
-              <span style={{color:g.ok&&!g.warn?t.t2:g.warn?t.warn:t.crit}}>
-                {g.lbl}{g.note?` — ${g.note}`:""}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,
-          background:t.surf,borderRadius:8,padding:"8px 12px",marginBottom:12}}>
-          <span style={{color:t.t3}}>Projected Impact</span>
-          <span style={{fontWeight:600,color:t.t1}}>{rec.impact}</span>
-        </div>
+        <p style={{fontSize:13,color:t.t2,lineHeight:1.6,marginBottom:12}}>{rec.rationale}</p>
 
         {!approved&&!ticketed&&(
           sku.agent.auto
@@ -840,15 +710,14 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
         )}
         {ticketed&&!approved&&<div style={{background:t.tickBg,border:`1px solid ${t.tickBd}`,borderRadius:8,padding:10,fontSize:12,color:t.tick,textAlign:"center"}}>🎫 Ticket submitted — awaiting your approval in Tickets tab</div>}
         {approved&&<div style={{background:t.goodBg,border:`1px solid ${t.goodBd}`,borderRadius:8,padding:10,fontSize:12,color:t.good,textAlign:"center"}}>✅ Action executed</div>}
-      </div>
+      </div>}
 
       {/* PO */}
-      {poOn&&rec.needsPO&&(
+      {poOn&&rec?.needsPO&&(
         <div style={{background:t.warnBg,border:`1px solid ${t.warnBd}`,borderRadius:12,padding:14,marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:700,color:t.warn,marginBottom:10}}>📦 PO RECOMMENDATION</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-            {[["Reorder Qty",`${rec.reorderQty} units`],["Vendor",sku.vendor],
-              ["MOQ",`${sku.moq} units`],["Lead Time",`${sku.lt} days`]].map(([l,v])=>(
+            {[["Vendor",sku.vendor||"—"],["MOQ",`${sku.moq||"—"} units`],["Lead Time",`${sku.lt||"—"} days`]].map(([l,v])=>(
               <div key={l} style={{background:t.surf,borderRadius:8,padding:10,border:`1px solid ${t.bdr}`}}>
                 <div style={{fontSize:10,color:t.t3}}>{l}</div>
                 <div style={{fontWeight:600,color:t.t1,fontSize:13,marginTop:2}}>{v}</div>
@@ -883,7 +752,7 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
           ["inventory",`${sku.onH} units on hand · ${sku.vel}/day velocity → ${sku.doc}d cover`],
           ["demand_7d_vs_14d",`v7=${sku.v7} vs v14=${sku.v14} (${sku.v7>sku.v14?"+":""}${Math.round(((sku.v7-sku.v14)/Math.max(sku.v14,1))*100)}%)`],
           ["margin",`${(sku.mPct*100).toFixed(1)}% margin · floor ${(sku.mFloor*100).toFixed(0)}%`],
-          hasAgentRec?["source","Agent recommendation (real)"]:[" source","Local computation (fallback)"],
+          ["source", hasAgentRec?"Agent recommendation (real)":"No agent recommendation yet"],
         ].map(([src,detail])=>(
           <div key={src} style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:6,fontSize:11}}>
             <code style={{background:t.bdr,color:t.t2,padding:"2px 6px",borderRadius:4}}>{src}</code>
@@ -898,7 +767,7 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TICKETS PAGE
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function TicketsPage({tickets,onApprove,onReject}){
+function TicketsPage({tickets,onApprove,onReject,loading}){
   const t=useT();
   const [tab,setTab]=useState("OPEN");
   const filtered=tickets.filter(tk=>tab==="ALL"?true:tk.status===tab);
@@ -925,11 +794,28 @@ function TicketsPage({tickets,onApprove,onReject}){
       ))}
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      {filtered.length===0&&<div style={{padding:48,textAlign:"center",color:t.t3}}>
+      {loading&&Array.from({length:3}).map((_,i)=>(
+        <div key={i} style={{background:t.surf,border:`1px solid ${t.bdr}`,borderRadius:14,padding:18,boxShadow:t.sh}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <Sk w={60} h={11}/><Sk w={48} h={20} r={99}/><Sk w={56} h={20} r={99}/>
+              </div>
+              <Sk w={160} h={14} style={{marginBottom:6}}/><Sk w={90} h={11}/>
+            </div>
+            <div style={{textAlign:"right"}}><Sk w={80} h={11} style={{marginBottom:6}}/><Sk w={70} h={11}/></div>
+          </div>
+          <div style={{background:t.surf2,borderRadius:10,padding:12,marginBottom:12}}>
+            <Sk w={120} h={11} style={{marginBottom:8}}/><Sk w={180} h={13} style={{marginBottom:10}}/><Sk w={100} h={11} style={{marginBottom:6}}/><Sk w={140} h={11}/>
+          </div>
+          <div style={{display:"flex",gap:8}}><Sk h={34} r={8} style={{flex:1}}/><Sk w={90} h={34} r={8}/></div>
+        </div>
+      ))}
+      {!loading&&filtered.length===0&&<div style={{padding:48,textAlign:"center",color:t.t3}}>
         <div style={{fontSize:32,marginBottom:8}}>🎫</div>
         <div>No {tab.toLowerCase()} tickets</div>
       </div>}
-      {filtered.map(tk=>(
+      {!loading&&filtered.map(tk=>(
         <div key={tk.id} className="fi" style={{background:t.surf,border:`1px solid ${t.bdr}`,
           borderRadius:14,padding:18,boxShadow:t.sh}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
@@ -974,7 +860,7 @@ function TicketsPage({tickets,onApprove,onReject}){
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // AUDIT PAGE
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function AuditPage({log}){
+function AuditPage({log,loading}){
   const t=useT();
   const typeC={AUTONOMOUS:t.auto,TICKET:t.tick};
   const typeBg={AUTONOMOUS:t.autoBg,TICKET:t.tickBg};
@@ -985,7 +871,18 @@ function AuditPage({log}){
       <p style={{fontSize:13,color:t.t3,marginTop:4}}>All agent actions and system events</p>
     </div>
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      {log.map(e=>(
+      {loading&&Array.from({length:5}).map((_,i)=>(
+        <div key={i} style={{background:t.surf,border:`1px solid ${t.bdr}`,borderRadius:12,padding:16,display:"flex",gap:14,alignItems:"flex-start"}}>
+          <div style={{width:8,height:8,borderRadius:"50%",marginTop:5,flexShrink:0,background:t.bdr}}/>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+              <Sk w={120} h={13}/><Sk w={70} h={11}/><Sk w={44} h={18} r={99}/>
+            </div>
+            <Sk w="80%" h={13} style={{marginBottom:8}}/><div style={{display:"flex",gap:16}}><Sk w={80} h={11}/><Sk w={70} h={11}/></div>
+          </div>
+        </div>
+      ))}
+      {!loading&&log.map(e=>(
         <div key={e.id} style={{background:t.surf,border:`1px solid ${t.bdr}`,
           borderRadius:12,padding:16,display:"flex",gap:14,alignItems:"flex-start"}}>
           <div style={{width:8,height:8,borderRadius:"50%",marginTop:5,flexShrink:0,
@@ -1008,7 +905,7 @@ function AuditPage({log}){
           </div>
         </div>
       ))}
-      {log.length===0&&<div style={{padding:48,textAlign:"center",color:t.t3}}>No actions yet</div>}
+      {!loading&&log.length===0&&<div style={{padding:48,textAlign:"center",color:t.t3}}>No actions yet</div>}
     </div>
   </div>;
 }
@@ -1190,24 +1087,22 @@ export default function App(){
   const [thresholds,setThresholds]=useState(DEF_TH);
   const [poOn,setPoOn]=useState(true);
   const [waOn,setWaOn]=useState(true);
-  const [skus,setSkus]=useState(()=>buildSKUs(DEF_TH));
-  const [selected,setSelected]=useState(null);
-  const [tickets,setTickets]=useState(INIT_TICKETS);
-  const [audit,setAudit]=useState(INIT_AUDIT);
-  const [approved,setApproved]=useState(new Set(["SKU-D044"]));
-  const [ticketed,setTicketed]=useState(new Set(["SKU-A001","SKU-B012"]));
-  const [modal,setModal]=useState(null);
-  const [toasts,setToasts]=useState([]);
-  const [notifications,setNotifications]=useState([]);
+  const [skus,setSkus]=useState<any[]>([]);
+  const [selected,setSelected]=useState<any>(null);
+  const [tickets,setTickets]=useState<any[]>([]);
+  const [audit,setAudit]=useState<any[]>([]);
+  const [approved,setApproved]=useState<Set<string>>(new Set());
+  const [ticketed,setTicketed]=useState<Set<string>>(new Set());
+  const [loading,setLoading]=useState(true);
+  const [modal,setModal]=useState<any>(null);
+  const [toasts,setToasts]=useState<any[]>([]);
+  const [notifications,setNotifications]=useState<any[]>([]);
   const [unreadCount,setUnreadCount]=useState(0);
   const [notifOpen,setNotifOpen]=useState(false);
-  const [lastSync,setLastSync]=useState(null);
+  const [lastSync,setLastSync]=useState<number|null>(null);
   const [agentRunning,setAgentRunning]=useState(false);
   const [skuAgentRunning,setSkuAgentRunning]=useState(false);
   const [period,setPeriod]=useState("daily");
-
-  // Rebuild SKUs when thresholds change (local fallback)
-  useEffect(()=>{setSkus(buildSKUs(thresholds));},[ thresholds]);
 
   const mapDashboard=(dashRes)=>{
     if(!dashRes?.skus?.length)return;
@@ -1273,7 +1168,7 @@ export default function App(){
       mapAudit(audRes);
       mapNotifs(nRes);
       setLastSync(Date.now());
-    }catch{}
+    }catch{}finally{setLoading(false);}
   };
 
   // Load data when period changes (and on mount)
@@ -1450,9 +1345,9 @@ export default function App(){
           onNavigate={handleNotifNavigate}/>}
         <div style={{flex:1,overflow:"auto",display:"flex",flexDirection:"column",minHeight:0}}>
           {page==="dashboard"&&<Dashboard skus={skus} setSelected={setSelected} selected={selected}
-            tickets={tickets} audit={audit}/>}
-          {page==="tickets"&&<TicketsPage tickets={tickets} onApprove={approveTicket} onReject={rejectTicket}/>}
-          {page==="audit"&&<AuditPage log={audit}/>}
+            tickets={tickets} audit={audit} loading={loading}/>}
+          {page==="tickets"&&<TicketsPage tickets={tickets} onApprove={approveTicket} onReject={rejectTicket} loading={loading}/>}
+          {page==="audit"&&<AuditPage log={audit} loading={loading}/>}
           {page==="settings"&&<SettingsPage thresholds={thresholds} setThresholds={handleThresholds}
             poOn={poOn} setPoOn={setPoOn} waOn={waOn} setWaOn={setWaOn} dm={dm} setDm={setDm}
             onSave={()=>toast("✅ Settings saved")}/>}
