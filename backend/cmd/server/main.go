@@ -91,6 +91,9 @@ func main() {
 	a2aClient := agent.NewA2AClient()
 
 	topMux := http.NewServeMux()
+	topMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	topMux.Handle("/api/v1/dashboard", dashboardHandler(repo))
 	topMux.HandleFunc("POST /api/v1/agents/run", agentRunHandler(repo, a2aClient))
 	topMux.HandleFunc("GET /api/v1/agents/status/{id}", agentStatusHandler())
