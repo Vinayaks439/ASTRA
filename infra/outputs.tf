@@ -1,27 +1,22 @@
 output "acr_login_server" {
   description = "Azure Container Registry login server"
-  value       = module.acr.login_server
+  value       = data.azurerm_container_registry.main.login_server
 }
 
-output "aks_cluster_name" {
-  description = "AKS cluster name"
-  value       = module.aks.cluster_name
-}
-
-output "aks_resource_group" {
+output "resource_group_name" {
   description = "Resource group name"
   value       = module.resource_group.name
 }
 
 output "cosmos_endpoint" {
   description = "Cosmos DB endpoint"
-  value       = module.cosmos_db.endpoint
+  value       = data.azurerm_cosmosdb_account.main.endpoint
   sensitive   = true
 }
 
 output "cosmos_key" {
   description = "Cosmos DB primary key"
-  value       = module.cosmos_db.primary_key
+  value       = data.azurerm_cosmosdb_account.main.primary_key
   sensitive   = true
 }
 
@@ -32,7 +27,7 @@ output "cosmos_database_name" {
 
 output "key_vault_uri" {
   description = "Key Vault URI"
-  value       = module.key_vault.vault_uri
+  value       = data.azurerm_key_vault.main.vault_uri
 }
 
 output "container_app_fqdns" {
@@ -42,6 +37,6 @@ output "container_app_fqdns" {
 
 output "openai_endpoint" {
   description = "Azure OpenAI endpoint"
-  value       = module.openai.endpoint
+  value       = data.azurerm_cognitive_account.openai.endpoint
   sensitive   = true
 }

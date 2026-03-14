@@ -23,7 +23,8 @@ variable "current_principal_id" {
 }
 
 variable "aks_principal_id" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "cosmos_endpoint" {

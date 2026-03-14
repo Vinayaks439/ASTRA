@@ -14,11 +14,14 @@ resource "azurerm_key_vault" "main" {
     secret_permissions = ["Get", "List", "Set", "Delete", "Purge"]
   }
 
-  access_policy {
-    tenant_id = var.tenant_id
-    object_id = var.aks_principal_id
+  dynamic "access_policy" {
+    for_each = var.aks_principal_id != "" ? [1] : []
+    content {
+      tenant_id = var.tenant_id
+      object_id = var.aks_principal_id
 
-    secret_permissions = ["Get", "List"]
+      secret_permissions = ["Get", "List"]
+    }
   }
 
   tags = {

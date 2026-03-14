@@ -9,3 +9,8 @@ variable "environment" {
 variable "location" {
   type = string
 }
+
+variable "name" {
+  type    = string
+  default = ""
+}
