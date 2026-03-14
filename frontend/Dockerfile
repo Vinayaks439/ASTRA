@@ -17,6 +17,8 @@ server {
 
     location /api/ {
         proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $proxy_host;
         proxy_set_header X-Real-IP $remote_addr;
     }
