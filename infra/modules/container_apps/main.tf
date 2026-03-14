@@ -13,6 +13,8 @@ locals {
     key => "https://ca-${var.project}-${key}-${var.environment}.${azurerm_container_app_environment.main.default_domain}"
   }
 
+  mcp_server_url = "https://ca-${var.project}-mcp-server-${var.environment}.${azurerm_container_app_environment.main.default_domain}/sse"
+
   env_var_map = {
     "risk-assessment"  = "RISK_AGENT_URL"
     "recommendation"   = "RECOMMENDATION_AGENT_URL"
@@ -24,10 +26,9 @@ locals {
 }
 
 resource "azurerm_container_app_environment" "main" {
-  name                       = "cae-${var.project}-${var.environment}"
-  resource_group_name        = var.resource_group_name
-  location                   = var.location
-  infrastructure_subnet_id   = var.subnet_id
+  name                = "cae-${var.project}-${var.environment}"
+  resource_group_name = var.resource_group_name
+  location            = var.location
 
   tags = {
     project     = var.project
@@ -172,6 +173,11 @@ resource "azurerm_container_app" "agents" {
         value = local.agent_fqdns["notification"]
       }
 
+      env {
+        name  = "MCP_SERVER_URL"
+        value = local.mcp_server_url
+      }
+
       liveness_probe {
         transport = "HTTP"
         port      = each.value.port
@@ -190,5 +196,76 @@ resource "azurerm_container_app" "agents" {
     project     = var.project
     environment = var.environment
     agent       = each.key
+  }
+}
+
+resource "azurerm_container_app" "mcp_server" {
+  name                         = "ca-${var.project}-mcp-server-${var.environment}"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = var.resource_group_name
+  revision_mode                = "Single"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.agents.id]
+  }
+
+  registry {
+    server   = var.acr_login_server
+    identity = azurerm_user_assigned_identity.agents.id
+  }
+
+  secret {
+    name  = "cosmos-key"
+    value = var.cosmos_key
+  }
+
+  ingress {
+    external_enabled = false
+    target_port      = 6060
+    transport        = "http"
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 1
+
+    container {
+      name   = "mcp-server"
+      image  = "${var.acr_login_server}/${var.project}-agent-mcp-server:latest"
+      cpu    = 0.5
+      memory = "1Gi"
+
+      env {
+        name  = "COSMOS_ENDPOINT"
+        value = var.cosmos_endpoint
+      }
+
+      env {
+        name        = "COSMOS_KEY"
+        secret_name = "cosmos-key"
+      }
+
+      env {
+        name  = "COSMOS_DATABASE"
+        value = var.cosmos_database
+      }
+
+      env {
+        name  = "MCP_SERVER_PORT"
+        value = "6060"
+      }
+    }
+  }
+
+  tags = {
+    project     = var.project
+    environment = var.environment
+    agent       = "mcp-server"
   }
 }
