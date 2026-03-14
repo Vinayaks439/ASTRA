@@ -299,7 +299,7 @@ function Sidebar({page,setPage,critCount,openTickets}){
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // TOP BAR
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function TopBar({dm,setDm,waOn,lastSync,onRunAgents,agentRunning,unreadCount,notifOpen,setNotifOpen}){
+function TopBar({dm,setDm,waOn,lastSync,onRunAgents,agentRunning,unreadCount,notifOpen,setNotifOpen,period,setPeriod}){
   const t=useT();
   const syncLabel=lastSync?`${Math.round((Date.now()-lastSync)/1000)}s ago`:"—";
   return <div style={{height:56,background:t.surf,borderBottom:`1px solid ${t.bdr}`,
@@ -309,6 +309,13 @@ function TopBar({dm,setDm,waOn,lastSync,onRunAgents,agentRunning,unreadCount,not
       Last synced: <span style={{color:t.t1,fontWeight:500}}>{syncLabel}</span>
     </div>
     <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <select value={period} onChange={e=>setPeriod(e.target.value)} style={{
+        padding:"5px 10px",borderRadius:8,border:`1px solid ${t.bdr}`,
+        background:t.surf2,color:t.t1,fontSize:12,fontWeight:500,cursor:"pointer"}}>
+        <option value="daily">Daily</option>
+        <option value="weekly">Weekly</option>
+        <option value="monthly">Monthly</option>
+      </select>
       <button onClick={onRunAgents} disabled={agentRunning} style={{
         display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,
         border:"none",background:agentRunning?"#64748B":"#2563EB",color:"#fff",
@@ -1197,6 +1204,7 @@ export default function App(){
   const [lastSync,setLastSync]=useState(null);
   const [agentRunning,setAgentRunning]=useState(false);
   const [skuAgentRunning,setSkuAgentRunning]=useState(false);
+  const [period,setPeriod]=useState("daily");
 
   // Rebuild SKUs when thresholds change (local fallback)
   useEffect(()=>{setSkus(buildSKUs(thresholds));},[ thresholds]);
@@ -1252,10 +1260,10 @@ export default function App(){
     setUnreadCount(nRes.unreadCount||0);
   };
 
-  const refreshAll=async()=>{
+  const refreshAll=async(p=period)=>{
     try{
       const [dashRes,tktRes,audRes,nRes]=await Promise.all([
-        fetch("/api/v1/dashboard").then(r=>r.ok?r.json():null).catch(()=>null),
+        fetch(`/api/v1/dashboard?period=${p}`).then(r=>r.ok?r.json():null).catch(()=>null),
         fetch("/api/v1/tickets").then(r=>r.ok?r.json():null).catch(()=>null),
         fetch("/api/v1/audit").then(r=>r.ok?r.json():null).catch(()=>null),
         fetch("/api/v1/notifications").then(r=>r.ok?r.json():null).catch(()=>null),
@@ -1268,8 +1276,8 @@ export default function App(){
     }catch{}
   };
 
-  // Load data on mount
-  useEffect(()=>{ refreshAll(); },[]);
+  // Load data when period changes (and on mount)
+  useEffect(()=>{ refreshAll(period); },[period]);
 
   // Poll notifications every 15 seconds
   useEffect(()=>{
@@ -1286,7 +1294,7 @@ export default function App(){
     setAgentRunning(true);
     toast("▶ Agent pipeline started…","info");
     try{
-      const res=await fetch("/api/v1/agents/run",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+      const res=await fetch("/api/v1/agents/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({period})});
       if(!res.ok){toast("Failed to start agents","warn");setAgentRunning(false);return;}
       const {jobId}=await res.json();
       const poll=async()=>{
@@ -1325,7 +1333,7 @@ export default function App(){
     toast(`▶ Running agents for ${sku.name}…`,"info");
     try{
       const res=await fetch("/api/v1/agents/run",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({sku_ids:[skuId]})});
+        body:JSON.stringify({sku_ids:[skuId],period})});
       if(!res.ok){toast("Failed to start agent for SKU","warn");setSkuAgentRunning(false);return;}
       const {jobId}=await res.json();
       for(let i=0;i<40;i++){
@@ -1435,7 +1443,8 @@ export default function App(){
       <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,position:"relative"}}>
         <TopBar dm={dm} setDm={setDm} waOn={waOn} lastSync={lastSync}
           onRunAgents={handleRunAgents} agentRunning={agentRunning}
-          unreadCount={unreadCount} notifOpen={notifOpen} setNotifOpen={setNotifOpen}/>
+          unreadCount={unreadCount} notifOpen={notifOpen} setNotifOpen={setNotifOpen}
+          period={period} setPeriod={setPeriod}/>
         {notifOpen&&<NotificationPanel notifications={notifications} unreadCount={unreadCount}
           onMarkAllRead={handleMarkAllRead} onClose={()=>setNotifOpen(false)}
           onNavigate={handleNotifNavigate}/>}

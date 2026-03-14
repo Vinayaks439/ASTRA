@@ -86,6 +86,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
 
     recommendations = data.get("recommendations", [])
     risk_scores = data.get("risk_scores", [])
+    period = data.get("period", "daily")
     risk_map = {r["skuId"]: r for r in risk_scores}
     settings = await query_settings()
     skus_map = {s["id"]: s for s in await query_skus()}
@@ -137,7 +138,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
             await a2a.send_task(
                 notify_url,
                 task_id=f"notify-{task_id}",
-                data={"tickets": tickets_created},
+                data={"tickets": tickets_created, "period": period},
             )
             await a2a.close()
         except Exception as e:

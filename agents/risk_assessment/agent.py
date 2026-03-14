@@ -167,6 +167,9 @@ async def handle_task(task_id: str, message: Message) -> Task:
             data = part.data if isinstance(part.data, dict) else {}
 
     sku_ids = data.get("sku_ids", [])
+    period = data.get("period", "daily")
+    if period not in ("daily", "weekly", "monthly"):
+        period = "daily"
     settings = await query_settings()
 
     if not sku_ids:
@@ -176,12 +179,16 @@ async def handle_task(task_id: str, message: Message) -> Task:
         skus = await query_skus()
         skus = [s for s in skus if s["id"] in sku_ids]
 
+    # Determine snapshot limit by period
+    snap_limit = 30 if period == "daily" else (12 if period == "weekly" else 6)
+
     results = []
     for sku in skus:
         sid = sku["id"]
-        own_snaps = await query_own_snapshots(sid, "daily", 30)
-        comp_snaps = await query_comp_snapshots(sid, "daily", 30)
+        own_snaps = await query_own_snapshots(sid, period, snap_limit)
+        comp_snaps = await query_comp_snapshots(sid, period, snap_limit)
         risk = compute_risk(sku, own_snaps, comp_snaps, settings)
+        risk["period"] = period
         await write_risk_scores(risk)
         results.append(risk)
 
@@ -192,7 +199,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
         await a2a.send_task(
             rec_url,
             task_id=f"rec-{task_id}",
-            data={"sku_ids": sku_ids, "risk_scores": results},
+            data={"sku_ids": sku_ids, "risk_scores": results, "period": period},
         )
         await a2a.close()
     except Exception as e:

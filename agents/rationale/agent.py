@@ -81,7 +81,7 @@ def _build_template_rationale(sku: dict, risk: dict, rec: dict) -> str:
     return "\n\n".join(parts)
 
 
-async def _generate_llm_rationale(sku: dict, risk: dict, rec: dict, weekly_own: list, monthly_comp: list) -> str:
+async def _generate_llm_rationale(sku: dict, risk: dict, rec: dict, period_own: list, period_comp: list, period: str) -> str:
     """Use Azure OpenAI GPT-4o to generate rich rationale."""
     if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_KEY:
         return _build_template_rationale(sku, risk, rec)
@@ -97,13 +97,14 @@ async def _generate_llm_rationale(sku: dict, risk: dict, rec: dict, weekly_own: 
 
         prompt = f"""You are an AI analyst for VoltEdge Electronics supply chain.
 Explain why the following action was recommended for the SKU.
+Analysis is based on {period} data.
 
 SKU: {sku.get('partName')} ({sku.get('partNo')})
 Selling Price: INR {sku.get('sellingPrice', 0):.0f}
 Cost Price: INR {sku.get('costPrice', 0):.0f}
 Margin: {sku.get('profitMarginPct', 0):.1f}%
 
-Risk Scores:
+Risk Scores (based on {period} snapshots):
 - Price Gap: {risk.get('priceGap', 0)}/30
 - Stock Coverage: {risk.get('stockCoverage', 0)}/30
 - Demand Trend: {risk.get('demandTrend', 0)}/20
@@ -140,6 +141,9 @@ async def handle_task(task_id: str, message: Message) -> Task:
             data = part.data if isinstance(part.data, dict) else {}
 
     sku_id = data.get("sku_id", "")
+    period = data.get("period", "daily")
+    if period not in ("daily", "weekly", "monthly"):
+        period = "daily"
     if not sku_id:
         return make_completed_task(task_id, "rationale", {"error": "sku_id required"})
 
@@ -154,10 +158,11 @@ async def handle_task(task_id: str, message: Message) -> Task:
     recs = await query_recommendations(sku_id)
     rec = recs[0] if recs else {}
 
-    weekly_own = await query_own_snapshots(sku_id, "weekly", 8)
-    monthly_comp = await query_comp_snapshots(sku_id, "monthly", 6)
+    snap_limit = 30 if period == "daily" else (12 if period == "weekly" else 6)
+    period_own = await query_own_snapshots(sku_id, period, snap_limit)
+    period_comp = await query_comp_snapshots(sku_id, period, snap_limit)
 
-    rationale = await _generate_llm_rationale(sku, risk, rec, weekly_own, monthly_comp)
+    rationale = await _generate_llm_rationale(sku, risk, rec, period_own, period_comp, period)
 
     try:
         await write_agent_decision({

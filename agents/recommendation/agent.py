@@ -95,6 +95,9 @@ async def handle_task(task_id: str, message: Message) -> Task:
 
     risk_scores = data.get("risk_scores", [])
     sku_ids = data.get("sku_ids", [])
+    period = data.get("period", "daily")
+    if period not in ("daily", "weekly", "monthly"):
+        period = "daily"
     settings = await query_settings()
 
     skus_map = {s["id"]: s for s in await query_skus()}
@@ -106,6 +109,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
         if not sku:
             continue
         rec = generate_recommendation(sku, risk, settings)
+        rec["period"] = period
         await write_recommendation(rec)
         results.append(rec)
 
@@ -116,7 +120,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
         await a2a.send_task(
             triage_url,
             task_id=f"triage-{task_id}",
-            data={"recommendations": results, "risk_scores": risk_scores},
+            data={"recommendations": results, "risk_scores": risk_scores, "period": period},
         )
         await a2a.close()
     except Exception as e:

@@ -66,7 +66,7 @@ def _build_template_insights(skus: list, risks: list, tickets: list) -> list[str
     return insights[:3]
 
 
-async def _generate_llm_insights(skus: list, risks: list, tickets: list) -> list[str]:
+async def _generate_llm_insights(skus: list, risks: list, tickets: list, period: str = "daily") -> list[str]:
     """Use GPT-4o to generate rich insights."""
     if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_KEY:
         return _build_template_insights(skus, risks, tickets)
@@ -92,7 +92,8 @@ async def _generate_llm_insights(skus: list, risks: list, tickets: list) -> list
         )
 
         prompt = f"""You are the AI Summary Panel for VoltEdge Electronics supply chain dashboard.
-Generate exactly 3 concise insight sentences based on these metrics:
+Generate exactly 3 concise insight sentences based on these metrics.
+Data granularity: {period} (tailor insights to this time horizon — e.g. weekly trends, monthly patterns).
 
 Total SKUs: {len(skus)}
 Critical: {critical}, Warning: {warning}, Healthy: {len(skus) - critical - warning}
@@ -124,11 +125,20 @@ Each insight should be 1 sentence, actionable, and specific. Format as a JSON ar
 
 async def handle_task(task_id: str, message: Message) -> Task:
     """A2A task handler — generate dashboard insights."""
+    data = {}
+    for part in message.parts:
+        if part.data:
+            data = part.data if isinstance(part.data, dict) else {}
+
+    period = data.get("period", "daily")
+    if period not in ("daily", "weekly", "monthly"):
+        period = "daily"
+
     skus = await query_skus()
     risks = await query_risk_scores()
     tickets = await query_tickets()
 
-    insights = await _generate_llm_insights(skus, risks, tickets)
+    insights = await _generate_llm_insights(skus, risks, tickets, period)
 
     decision_doc = {
         "id": "insights-latest",
@@ -136,6 +146,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
         "type": "insights",
         "content": insights,
         "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "period": period,
         "counts": {
             "total": len(skus),
             "openTickets": sum(1 for t in tickets if t.get("status") == "OPEN"),

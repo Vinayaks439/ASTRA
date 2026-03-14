@@ -184,6 +184,11 @@ func dashboardHandler(repo *repository.Repository) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
+		period := r.URL.Query().Get("period")
+		if period != "weekly" && period != "monthly" {
+			period = "daily"
+		}
+
 		skus, err := repo.ListSKUs(ctx)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -203,7 +208,7 @@ func dashboardHandler(repo *repository.Repository) http.Handler {
 				Currency:        sku.Currency,
 			}
 
-			own, err := repo.GetLatestDailyOwnSnapshot(ctx, sku.ID)
+			own, err := repo.GetLatestOwnSnapshotForPeriod(ctx, sku.ID, period)
 			if err == nil && own != nil {
 				e.OnHandUnits = own.OnHandUnits
 				e.InboundUnits = own.InboundUnits
@@ -213,7 +218,7 @@ func dashboardHandler(repo *repository.Repository) http.Handler {
 				e.SnapshotDate = own.Date
 			}
 
-			comps, err := repo.GetLatestDailyCompSnapshots(ctx, sku.ID)
+			comps, err := repo.GetLatestCompSnapshotsForPeriod(ctx, sku.ID, period)
 			if err == nil && len(comps) > 0 {
 				lowest := comps[0].CompetitorPrice
 				name := comps[0].CompName
@@ -285,8 +290,14 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			SKUIDs []string `json:"sku_ids"`
+			Period string   `json:"period"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
+
+		period := body.Period
+		if period != "weekly" && period != "monthly" {
+			period = "daily"
+		}
 
 		jobID := fmt.Sprintf("job-%d", time.Now().UnixNano())
 		job := &agentJob{ID: jobID, Status: "running", StartedAt: time.Now().UTC().Format(time.RFC3339)}
@@ -294,7 +305,7 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 		jobs[jobID] = job
 		jobsMu.Unlock()
 
-		log.Printf("[agent-run] job %s started sku_ids=%v", jobID, body.SKUIDs)
+		log.Printf("[agent-run] job %s started period=%s sku_ids=%v", jobID, period, body.SKUIDs)
 
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
@@ -320,10 +331,10 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 			var results []string
 
 			// Phase 1: Risk assessment cascade (risk → recommendation → triage → notify)
-			log.Printf("[agent-run] job %s: phase 1 - risk assessment (%d SKUs)", jobID, len(skuIDs))
+			log.Printf("[agent-run] job %s: phase 1 - risk assessment (%d SKUs, period=%s)", jobID, len(skuIDs), period)
 			for _, skuID := range skuIDs {
 				taskID := fmt.Sprintf("run-%s-%d", skuID, time.Now().UnixNano())
-				payload := map[string]interface{}{"sku_ids": []string{skuID}}
+				payload := map[string]interface{}{"sku_ids": []string{skuID}, "period": period}
 				res, err := a2a.SendTask(ctx, "risk-assessment", taskID, payload)
 				if err != nil {
 					log.Printf("[agent-run] job %s: risk-assessment %s error: %v", jobID, skuID, err)
@@ -335,10 +346,10 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 			}
 
 			// Phase 2: Generate rationale for each SKU via LLM
-			log.Printf("[agent-run] job %s: phase 2 - rationale (%d SKUs)", jobID, len(skuIDs))
+			log.Printf("[agent-run] job %s: phase 2 - rationale (%d SKUs, period=%s)", jobID, len(skuIDs), period)
 			for _, skuID := range skuIDs {
 				taskID := fmt.Sprintf("rationale-%s-%d", skuID, time.Now().UnixNano())
-				payload := map[string]interface{}{"sku_id": skuID}
+				payload := map[string]interface{}{"sku_id": skuID, "period": period}
 				res, err := a2a.SendTask(ctx, "rationale", taskID, payload)
 				if err != nil {
 					log.Printf("[agent-run] job %s: rationale %s error: %v", jobID, skuID, err)
@@ -350,9 +361,9 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 			}
 
 			// Phase 3: Generate portfolio insights via LLM
-			log.Printf("[agent-run] job %s: phase 3 - insights", jobID)
+			log.Printf("[agent-run] job %s: phase 3 - insights (period=%s)", jobID, period)
 			insightsTaskID := fmt.Sprintf("insights-%d", time.Now().UnixNano())
-			res, err := a2a.SendTask(ctx, "insights", insightsTaskID, map[string]interface{}{})
+			res, err := a2a.SendTask(ctx, "insights", insightsTaskID, map[string]interface{}{"period": period})
 			if err != nil {
 				log.Printf("[agent-run] job %s: insights error: %v", jobID, err)
 				results = append(results, fmt.Sprintf("insights: error: %v", err))
