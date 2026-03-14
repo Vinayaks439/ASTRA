@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -84,17 +86,26 @@ type A2AArtifact struct {
 	Parts []TaskPart `json:"parts"`
 }
 
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
 func NewA2AClient() *A2AClient {
+	urls := map[string]string{
+		"risk-assessment":  envOrDefault("RISK_AGENT_URL", "http://localhost:7071"),
+		"recommendation":   envOrDefault("RECOMMENDATION_AGENT_URL", "http://localhost:7072"),
+		"exception-triage": envOrDefault("TRIAGE_AGENT_URL", "http://localhost:7073"),
+		"rationale":        envOrDefault("RATIONALE_AGENT_URL", "http://localhost:7074"),
+		"insights":         envOrDefault("INSIGHTS_AGENT_URL", "http://localhost:7075"),
+		"notification":     envOrDefault("NOTIFICATION_AGENT_URL", "http://localhost:7076"),
+	}
+	log.Printf("[a2a] agent URLs: %v", urls)
 	return &A2AClient{
 		httpClient: &http.Client{Timeout: 90 * time.Second},
-		agentURLs: map[string]string{
-			"risk-assessment":  "http://localhost:7071",
-			"recommendation":   "http://localhost:7072",
-			"exception-triage": "http://localhost:7073",
-			"rationale":        "http://localhost:7074",
-			"insights":         "http://localhost:7075",
-			"notification":     "http://localhost:7076",
-		},
+		agentURLs:  urls,
 	}
 }
 
@@ -156,6 +167,8 @@ func (c *A2AClient) SendTask(ctx context.Context, agentName string, taskID strin
 		return nil, fmt.Errorf("marshal task: %w", err)
 	}
 
+	log.Printf("[a2a] sending task %s to agent %s at %s/a2a payload=%s", taskID, agentName, baseURL, string(dataJSON))
+
 	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/a2a", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -164,6 +177,7 @@ func (c *A2AClient) SendTask(ctx context.Context, agentName string, taskID strin
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		log.Printf("[a2a] task %s agent %s: request failed: %v", taskID, agentName, err)
 		return nil, fmt.Errorf("send task to %s: %w", agentName, err)
 	}
 	defer resp.Body.Close()
@@ -172,6 +186,8 @@ func (c *A2AClient) SendTask(ctx context.Context, agentName string, taskID strin
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
+
+	log.Printf("[a2a] task %s agent %s: HTTP %d body=%s", taskID, agentName, resp.StatusCode, string(respBody))
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("agent %s returned %d: %s", agentName, resp.StatusCode, string(respBody))
@@ -182,5 +198,6 @@ func (c *A2AClient) SendTask(ctx context.Context, agentName string, taskID strin
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
+	log.Printf("[a2a] task %s agent %s: state=%s", taskID, agentName, a2aResp.Result.Status.State)
 	return &a2aResp.Result, nil
 }

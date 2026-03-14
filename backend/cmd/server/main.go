@@ -294,6 +294,8 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 		jobs[jobID] = job
 		jobsMu.Unlock()
 
+		log.Printf("[agent-run] job %s started sku_ids=%v", jobID, body.SKUIDs)
+
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 			defer cancel()
@@ -302,6 +304,7 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 			if len(skuIDs) == 0 {
 				skus, err := repo.ListSKUs(ctx)
 				if err != nil {
+					log.Printf("[agent-run] job %s: ListSKUs failed: %v", jobID, err)
 					jobsMu.Lock()
 					job.Status = "failed"
 					job.Error = err.Error()
@@ -311,40 +314,50 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 				for _, s := range skus {
 					skuIDs = append(skuIDs, s.ID)
 				}
+				log.Printf("[agent-run] job %s: resolved %d SKUs", jobID, len(skuIDs))
 			}
 
 			var results []string
 
 			// Phase 1: Risk assessment cascade (risk → recommendation → triage → notify)
+			log.Printf("[agent-run] job %s: phase 1 - risk assessment (%d SKUs)", jobID, len(skuIDs))
 			for _, skuID := range skuIDs {
 				taskID := fmt.Sprintf("run-%s-%d", skuID, time.Now().UnixNano())
 				payload := map[string]interface{}{"sku_ids": []string{skuID}}
 				res, err := a2a.SendTask(ctx, "risk-assessment", taskID, payload)
 				if err != nil {
+					log.Printf("[agent-run] job %s: risk-assessment %s error: %v", jobID, skuID, err)
 					results = append(results, fmt.Sprintf("%s: risk error: %v", skuID, err))
 				} else {
+					log.Printf("[agent-run] job %s: risk-assessment %s => %s", jobID, skuID, res.Status.State)
 					results = append(results, fmt.Sprintf("%s: risk %s", skuID, res.Status.State))
 				}
 			}
 
 			// Phase 2: Generate rationale for each SKU via LLM
+			log.Printf("[agent-run] job %s: phase 2 - rationale (%d SKUs)", jobID, len(skuIDs))
 			for _, skuID := range skuIDs {
 				taskID := fmt.Sprintf("rationale-%s-%d", skuID, time.Now().UnixNano())
 				payload := map[string]interface{}{"sku_id": skuID}
 				res, err := a2a.SendTask(ctx, "rationale", taskID, payload)
 				if err != nil {
+					log.Printf("[agent-run] job %s: rationale %s error: %v", jobID, skuID, err)
 					results = append(results, fmt.Sprintf("%s: rationale error: %v", skuID, err))
 				} else {
+					log.Printf("[agent-run] job %s: rationale %s => %s", jobID, skuID, res.Status.State)
 					results = append(results, fmt.Sprintf("%s: rationale %s", skuID, res.Status.State))
 				}
 			}
 
 			// Phase 3: Generate portfolio insights via LLM
+			log.Printf("[agent-run] job %s: phase 3 - insights", jobID)
 			insightsTaskID := fmt.Sprintf("insights-%d", time.Now().UnixNano())
 			res, err := a2a.SendTask(ctx, "insights", insightsTaskID, map[string]interface{}{})
 			if err != nil {
+				log.Printf("[agent-run] job %s: insights error: %v", jobID, err)
 				results = append(results, fmt.Sprintf("insights: error: %v", err))
 			} else {
+				log.Printf("[agent-run] job %s: insights => %s", jobID, res.Status.State)
 				results = append(results, fmt.Sprintf("insights: %s", res.Status.State))
 			}
 
@@ -352,6 +365,7 @@ func agentRunHandler(repo *repository.Repository, a2a *agent.A2AClient) http.Han
 			job.Status = "completed"
 			job.Results = results
 			jobsMu.Unlock()
+			log.Printf("[agent-run] job %s: completed with %d results", jobID, len(results))
 		}()
 
 		w.Header().Set("Content-Type", "application/json")
