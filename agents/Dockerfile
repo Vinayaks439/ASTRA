@@ -71,3 +71,10 @@ ENV AGENT_MODULE=notification.agent \
     AGENT_PORT=7076
 EXPOSE 7076
 ENTRYPOINT ["/entrypoint.sh"]
+
+# ── mcp-server ────────────────────────────────────────────────────────────────
+FROM base AS mcp-server
+COPY --from=base /app /app
+ENV MCP_SERVER_PORT=6060
+EXPOSE 6060
+CMD ["python", "-m", "shared.mcp.server"]
