@@ -2,8 +2,8 @@ name: Deploy Frontend
 
 on:
   push:
-    branches: [main]
-    paths: ['frontend/**', 'k8s/frontend/**']
+    branches: [master]
+    paths: ['frontend/**']
   workflow_dispatch:
 
 permissions:
@@ -12,8 +12,7 @@ permissions:
 
 env:
   ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
-  AKS_CLUSTER_NAME: ${{ vars.AKS_CLUSTER_NAME }}
-  AKS_RESOURCE_GROUP: ${{ vars.AKS_RESOURCE_GROUP }}
+  RESOURCE_GROUP: ${{ vars.AKS_RESOURCE_GROUP }}
   IMAGE_NAME: astra-frontend
 
 jobs:
@@ -39,14 +38,9 @@ jobs:
           docker push $IMAGE_TAG
           docker push $IMAGE_LATEST
 
-      - uses: azure/aks-set-context@v3
-        with:
-          resource-group: ${{ env.AKS_RESOURCE_GROUP }}
-          cluster-name: ${{ env.AKS_CLUSTER_NAME }}
-
-      - name: Deploy to AKS
+      - name: Deploy to Container App
         run: |
-          kubectl set image deployment/frontend \
-            frontend=${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            -n astra
-          kubectl rollout status deployment/frontend -n astra --timeout=120s
+          az containerapp update \
+            --name ca-astra-frontend-dev \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

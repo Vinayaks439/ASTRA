@@ -35,6 +35,16 @@ output "container_app_fqdns" {
   value       = module.container_apps.agent_fqdns
 }
 
+output "backend_url" {
+  description = "Backend Container App URL"
+  value       = module.container_apps.backend_url
+}
+
+output "frontend_url" {
+  description = "Frontend Container App URL"
+  value       = module.container_apps.frontend_url
+}
+
 output "openai_endpoint" {
   description = "Azure OpenAI endpoint"
   value       = data.azurerm_cognitive_account.openai.endpoint

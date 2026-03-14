@@ -8,14 +8,15 @@ RUN npm run build
 
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY <<'EOF' /etc/nginx/conf.d/default.conf
+# nginx:alpine auto-runs envsubst on *.template files at startup
+COPY <<'EOF' /etc/nginx/templates/default.conf.template
 server {
     listen 80;
     root /usr/share/nginx/html;
     index index.html;
 
     location /api/ {
-        proxy_pass http://backend:8080;
+        proxy_pass ${BACKEND_URL};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }

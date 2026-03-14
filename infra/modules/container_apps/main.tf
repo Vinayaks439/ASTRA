@@ -1,4 +1,6 @@
 locals {
+  backend_url = "https://ca-${var.project}-backend-${var.environment}.${azurerm_container_app_environment.main.default_domain}"
+
   agents = {
     "risk-assessment"  = { port = 7071, module = "risk_assessment.agent" }
     "recommendation"   = { port = 7072, module = "recommendation.agent" }
@@ -267,5 +269,192 @@ resource "azurerm_container_app" "mcp_server" {
     project     = var.project
     environment = var.environment
     agent       = "mcp-server"
+  }
+}
+
+resource "azurerm_container_app" "backend" {
+  name                         = "ca-${var.project}-backend-${var.environment}"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = var.resource_group_name
+  revision_mode                = "Single"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.agents.id]
+  }
+
+  registry {
+    server   = var.acr_login_server
+    identity = azurerm_user_assigned_identity.agents.id
+  }
+
+  secret {
+    name  = "cosmos-key"
+    value = var.cosmos_key
+  }
+
+  secret {
+    name  = "openai-key"
+    value = var.openai_key
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 8080
+    transport        = "http"
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 3
+
+    container {
+      name   = "backend"
+      image  = "${var.acr_login_server}/${var.project}-backend:latest"
+      cpu    = 0.5
+      memory = "1Gi"
+
+      env {
+        name  = "HTTP_PORT"
+        value = "8080"
+      }
+
+      env {
+        name  = "GRPC_PORT"
+        value = "50051"
+      }
+
+      env {
+        name  = "COSMOS_ENDPOINT"
+        value = var.cosmos_endpoint
+      }
+
+      env {
+        name        = "COSMOS_KEY"
+        secret_name = "cosmos-key"
+      }
+
+      env {
+        name  = "COSMOS_DATABASE"
+        value = var.cosmos_database
+      }
+
+      env {
+        name  = "AZURE_OPENAI_ENDPOINT"
+        value = var.openai_endpoint
+      }
+
+      env {
+        name        = "AZURE_OPENAI_KEY"
+        secret_name = "openai-key"
+      }
+
+      env {
+        name  = "AZURE_OPENAI_DEPLOYMENT"
+        value = var.openai_deployment
+      }
+
+      env {
+        name  = "RISK_AGENT_URL"
+        value = local.agent_fqdns["risk-assessment"]
+      }
+
+      env {
+        name  = "RECOMMENDATION_AGENT_URL"
+        value = local.agent_fqdns["recommendation"]
+      }
+
+      env {
+        name  = "TRIAGE_AGENT_URL"
+        value = local.agent_fqdns["exception-triage"]
+      }
+
+      env {
+        name  = "RATIONALE_AGENT_URL"
+        value = local.agent_fqdns["rationale"]
+      }
+
+      env {
+        name  = "INSIGHTS_AGENT_URL"
+        value = local.agent_fqdns["insights"]
+      }
+
+      env {
+        name  = "NOTIFICATION_AGENT_URL"
+        value = local.agent_fqdns["notification"]
+      }
+
+      liveness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/api/v1/dashboard"
+      }
+
+      readiness_probe {
+        transport = "HTTP"
+        port      = 8080
+        path      = "/api/v1/dashboard"
+      }
+    }
+  }
+
+  tags = {
+    project     = var.project
+    environment = var.environment
+  }
+}
+
+resource "azurerm_container_app" "frontend" {
+  name                         = "ca-${var.project}-frontend-${var.environment}"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = var.resource_group_name
+  revision_mode                = "Single"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.agents.id]
+  }
+
+  registry {
+    server   = var.acr_login_server
+    identity = azurerm_user_assigned_identity.agents.id
+  }
+
+  ingress {
+    external_enabled = true
+    target_port      = 80
+    transport        = "http"
+
+    traffic_weight {
+      latest_revision = true
+      percentage      = 100
+    }
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 3
+
+    container {
+      name   = "frontend"
+      image  = "${var.acr_login_server}/${var.project}-frontend:latest"
+      cpu    = 0.25
+      memory = "0.5Gi"
+
+      env {
+        name  = "BACKEND_URL"
+        value = local.backend_url
+      }
+    }
+  }
+
+  tags = {
+    project     = var.project
+    environment = var.environment
   }
 }
