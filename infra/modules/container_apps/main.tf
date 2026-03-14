@@ -1,5 +1,5 @@
 locals {
-  backend_url = "https://ca-${var.project}-backend-${var.environment}.${azurerm_container_app_environment.main.default_domain}"
+  backend_url = "http://ca-${var.project}-backend-${var.environment}.${azurerm_container_app_environment.main.default_domain}"
 
   agents = {
     "risk-assessment"  = { port = 7071, module = "risk_assessment.agent" }
