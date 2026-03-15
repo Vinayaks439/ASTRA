@@ -15,69 +15,6 @@ A full-stack intelligent supply-chain command center that monitors SKU pricing, 
 | **Competitor Data** | SearchAPI Google Shopping | Competitor Puller agent (hourly) |
 | **Observability** | OpenTelemetry, Azure Monitor, Application Insights | Azure PaaS |
 
-## How It Works
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant FE as Frontend :9002
-    participant BE as Go Backend :8080
-    participant MCP as MCP Server :6060
-    participant RA as Risk Agent :7071
-    participant RC as Rec Agent :7072
-    participant TR as Triage Agent :7073
-    participant NT as Notify Agent :7076
-    participant RT as Rationale Agent :7074
-    participant IN as Insights Agent :7075
-    participant DB as Cosmos DB
-    participant LLM as Azure OpenAI
-
-    User->>FE: Click "Run Agents"
-    FE->>BE: POST /api/v1/agents/run
-    BE-->>FE: 202 {jobId}
-
-    Note over BE,RA: Phase 1: Risk Cascade
-    loop For each SKU
-        BE->>RA: A2A tasks/send {sku_id}
-        RA->>MCP: call_tool("query_own_snapshots")
-        MCP->>DB: Read snapshots (own + competitor)
-        RA->>RA: Compute risk scores (deterministic)
-        RA->>MCP: call_tool("write_risk_scores")
-        MCP->>DB: Upsert risk-scores
-        RA->>RC: A2A cascade
-        RC->>MCP: call_tool("query_skus") + call_tool("query_settings")
-        MCP->>DB: Read SKUs + settings
-        RC->>RC: Decision matrix → action
-        RC->>MCP: call_tool("write_recommendation")
-        MCP->>DB: Upsert recommendations
-        RC->>TR: A2A cascade
-        TR->>MCP: call_tool("write_ticket") + call_tool("write_audit")
-        MCP->>DB: Write tickets + audit-log
-        TR->>NT: A2A cascade
-    end
-
-    Note over BE,RT: Phase 2: LLM Rationale
-    loop For each SKU
-        BE->>RT: A2A tasks/send {sku_id}
-        RT->>MCP: call_tool("query_risk_scores") etc.
-        MCP->>DB: Read SKU + risk + recommendation
-        RT->>LLM: Generate explanation (GPT-4o-mini)
-        RT->>MCP: call_tool("write_agent_decision")
-        MCP->>DB: Upsert agent-decisions
-    end
-
-    Note over BE,IN: Phase 3: LLM Insights
-    BE->>IN: A2A tasks/send
-    IN->>MCP: call_tool("query_skus") etc.
-    MCP->>DB: Read all risks + tickets
-    IN->>LLM: Generate 3 insights (GPT-4o-mini)
-    IN->>MCP: call_tool("write_agent_decision")
-    MCP->>DB: Upsert agent-decisions
-
-    FE->>BE: GET /api/v1/agents/status/{jobId}
-    BE-->>FE: {status: "completed"}
-    FE->>BE: GET /api/v1/dashboard (refreshes all data)
-```
 
 ## Architecture
 
