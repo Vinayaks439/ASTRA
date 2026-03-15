@@ -8,7 +8,7 @@
 
 ## Context
 
-ASTRA requires a full-stack intelligent supply-chain command center combining a React frontend, Go gRPC backend, Python AI agents (Microsoft Agent Framework + A2A), Azure Cosmos DB, deployed on AKS and Azure Functions.
+ASTRA requires a full-stack intelligent supply-chain command center combining a React frontend, Go gRPC backend, Python AI agents (Microsoft Agent Framework + A2A), Azure Cosmos DB, deployed on Azure Container Apps.
 
 This ADR captures the top-level technology choices and layer boundaries.
 
@@ -18,10 +18,10 @@ This ADR captures the top-level technology choices and layer boundaries.
 
 | Layer | Technology | Hosting |
 |---|---|---|
-| **Frontend** | React 19, Vite 7, TypeScript, Tailwind, shadcn/ui | Azure AKS (nginx container) |
-| **Backend** | Go 1.22+, gRPC, protobuf, gRPC-Gateway (REST) | Azure AKS (Go container) |
-| **AI Agents** | Python 3.12, Microsoft Agent Framework, A2A protocol | Azure Functions (Durable) |
-| **MCP Tools** | Cosmos DB MCP Server, Azure MCP Server | Sidecar / Azure Functions |
+| **Frontend** | React 19, Vite 7, TypeScript, Tailwind, shadcn/ui | Azure Container Apps (nginx) |
+| **Backend** | Go 1.25, gRPC, protobuf, gRPC-Gateway (REST) | Azure Container Apps |
+| **AI Agents** | Python 3.12, Microsoft Agent Framework, A2A protocol | Azure Container Apps (7 agents) |
+| **MCP Tools** | Cosmos DB MCP Server, Azure MCP Server | Azure Container Apps (internal) |
 | **Database** | Azure Cosmos DB (NoSQL API) | Azure Cosmos DB (Serverless) |
 | **Messaging** | Azure Service Bus | Azure PaaS |
 | **Observability** | OpenTelemetry, Azure Monitor, Application Insights | Azure PaaS |
@@ -31,7 +31,7 @@ This ADR captures the top-level technology choices and layer boundaries.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              AZURE AKS CLUSTER                              │
+│                              AZURE CONTAINER APP ENVIRONMENT                              │
 │                                                                             │
 │  ┌──────────────────────┐        ┌────────────────────────────────────────┐ │
 │  │   FRONTEND (React)   │        │       GO gRPC BACKEND                  │ │
@@ -58,7 +58,7 @@ This ADR captures the top-level technology choices and layer boundaries.
                     └─────────┬───────────────┼───────────────┘         │
                               │               │                         │
 ┌─────────────────────────────┼───────────────┼─────────────────────────┼─────┐
-│                     AZURE FUNCTIONS (Durable)                               │
+│                     AZURE CONTAINER APPS — AGENTS                               │
 │                                                                             │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────────┐  │
 │  │ Risk Assessment   │  │ AI Insights      │  │ Exception Triage         │  │

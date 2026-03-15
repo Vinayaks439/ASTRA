@@ -6,13 +6,13 @@ A full-stack intelligent supply-chain command center that monitors SKU pricing, 
 
 | Layer | Technology | Hosting |
 |---|---|---|
-| **Frontend** | React 19, Vite 7, TypeScript, Tailwind CSS, shadcn/ui | Azure AKS (nginx container) |
-| **Backend** | Go 1.22+, gRPC, protobuf, gRPC-Gateway (REST) | Azure AKS (Go container) |
-| **AI Agents** | Python 3.12, Microsoft Agent Framework, A2A protocol | Azure Functions (Durable) / Local via uvicorn |
-| **LLM** | Azure OpenAI (GPT-4o-mini) | Azure AI Foundry (East US 2) |
-| **MCP Server** | FastMCP 3.x (SSE transport), 13 Cosmos DB tools | Local (:6060) / Azure Container Apps |
-| **Database** | Azure Cosmos DB (NoSQL API, Serverless) | Azure Cosmos DB |
-| **Messaging** | Azure Service Bus (planned) / A2A over HTTP (current) | Azure PaaS / Local |
+| **Frontend** | React 19, Vite 7, TypeScript, Tailwind CSS, shadcn/ui | Azure Container Apps (nginx) |
+| **Backend** | Go 1.25, gRPC, protobuf, gRPC-Gateway (REST) | Azure Container Apps |
+| **AI Agents** | Python 3.12, Microsoft Agent Framework, A2A protocol | Azure Container Apps (7 agents) |
+| **LLM** | Azure OpenAI (GPT-4o-mini) | Azure AI Foundry |
+| **MCP Server** | FastMCP 3.x (SSE transport), 14 Cosmos DB tools | Azure Container Apps (internal) |
+| **Database** | Azure Cosmos DB (NoSQL API, Serverless, 15 containers) | Azure Cosmos DB |
+| **Competitor Data** | SearchAPI Google Shopping | Competitor Puller agent (hourly) |
 | **Observability** | OpenTelemetry, Azure Monitor, Application Insights | Azure PaaS |
 
 ## How It Works
@@ -79,35 +79,50 @@ sequenceDiagram
     FE->>BE: GET /api/v1/dashboard (refreshes all data)
 ```
 
-## Agent Architecture
+## Architecture
 
-ASTRA uses 6 specialized Python agents that communicate via the **A2A (Agent-to-Agent) protocol** — JSON-RPC 2.0 over HTTP. Each agent runs as a FastAPI server and exposes `/.well-known/agent.json` for discovery and `/a2a` for task execution.
+![ASTRA Detailed Software Architecture](astraarch.png)
 
-All database operations go through a **real MCP (Model Context Protocol) server** — a FastMCP 3.x SSE server on port 6060 that exposes 13 Cosmos DB tools. Agents connect as MCP clients and call tools like `query_skus`, `write_risk_scores`, etc. over the protocol, rather than importing SDK functions directly.
+ASTRA uses 7 specialized Python agents that communicate via the **A2A (Agent-to-Agent) protocol** — JSON-RPC 2.0 over HTTP. Each agent runs as a FastAPI server and exposes `/.well-known/agent.json` for discovery and `/a2a` for task execution.
+
+All database operations go through a **real MCP (Model Context Protocol) server** — a FastMCP 3.x SSE server on port 6060 that exposes 14 Cosmos DB tools. Agents connect as MCP clients and call tools like `query_skus`, `write_risk_scores`, etc. over the protocol, rather than importing SDK functions directly.
+
+**Stack summary:**
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 19 + Vite + TypeScript + Tailwind CSS |
+| **Backend** | Go 1.25 + gRPC + gRPC-Gateway (REST on :8080) |
+| **Agent Layer** | Python 3.12 + FastAPI + Microsoft A2A Framework |
+| **MCP Server** | FastMCP 3.x + SSE Transport (14 tools) |
+| **LLM** | Azure OpenAI GPT-4o-mini (Rationale + Insights) |
+| **Database** | Azure Cosmos DB Serverless (15 containers) |
+| **Competitor Data** | SearchAPI Google Shopping (hourly, competitor-puller agent) |
+| **Hosting** | Azure Container Apps (agents, backend, frontend, MCP) |
 
 ### Agent Pipeline
 
 ```
                           ┌──────────────┐
                           │   Go Backend │  POST /api/v1/agents/run
-                          └──────┬───────┘
-                                 │
-              ┌──────────────────▼───────────────────┐
-              │  Phase 1: Risk Cascade (per SKU)     │
-              │                                       │
-              │  Risk Assessment ──► Recommendation   │
-              │      :7071             :7072          │
-              │                          │            │
-              │                    Exception Triage   │
-              │                        :7073          │
-              │                          │            │
-              │                    Notification       │
-              │                        :7076          │
+                          └──────┬───────┘          ┌────────────────────────┐
+                                 │                   │  Competitor Puller     │
+              ┌──────────────────▼───────────────────┐  :7077 (hourly cron)  │
+              │  Phase 1: Risk Cascade (per SKU)     │  SearchAPI → hourly-  │
+              │                                       │  comp-snapshots       │
+              │  Risk Assessment ──► Recommendation   └────────────────────────┘
+              │      :7071             :7072
+              │                          │
+              │                    Exception Triage
+              │                        :7073
+              │                          │
+              │                    Notification
+              │                        :7076
               └───────────────┬────────────┬──────────┘
                               │            │
               ┌───────────────▼────────────▼──────────┐
               │  MCP Cosmos DB Server :6060 (SSE)     │
-              │  13 tools (query_* + write_*)         │
+              │  14 tools (query_* + write_*)         │
               │  FastMCP 3.x → azure-cosmos SDK       │
               └───────────────┬───────────────────────┘
                               │
@@ -134,6 +149,7 @@ All database operations go through a **real MCP (Model Context Protocol) server*
 | 4 | **Rationale** | 7074 | GPT-4o-mini | Read: SKU, risk, rec. Write: `agent-decisions` | LLM-generated natural language explanation per SKU |
 | 5 | **Insights** | 7075 | GPT-4o-mini | Read: risks, tickets. Write: `agent-decisions` | LLM-generated portfolio-level insights (3 sentences) |
 | 6 | **Notification** | 7076 | GPT-4o-mini | Read: settings | WhatsApp message composition (planned) |
+| 7 | **Competitor Puller** | 7077 | No (SearchAPI) | Write: `hourly-comp-snapshots`, `competitors` | Hourly Google Shopping scrape via SearchAPI, stores price snapshots per SKU |
 
 ### MCP Server (Model Context Protocol)
 
@@ -196,12 +212,13 @@ Every piece of data in the UI is produced by actual agent computation:
 - **LLM Insights** — Azure OpenAI GPT-4o-mini generates portfolio insights, persisted in `agent-decisions` container, displayed in the AI Summary panel
 - **Notifications** — Go backend merges tickets + audit entries into a unified notification feed with unread counts, polled every 15 seconds
 
-## Cosmos DB Containers (14)
+## Cosmos DB Containers (15)
 
 | Container | Partition Key | Written By | Description |
 |---|---|---|---|
 | `skus` | `/category` | Seed script | 10 SKU product catalog entries |
-| `competitors` | `/platform` | Seed script | Competitor profiles |
+| `competitors` | `/platform` | Competitor puller agent | Competitor profiles (upserted hourly) |
+| `hourly-comp-snapshots` | `/skuId` | Competitor puller agent | Live competitor prices scraped every hour |
 | `daily-own-snapshots` | `/skuId` | Seed script | Daily own price/stock/velocity |
 | `daily-comp-snapshots` | `/skuId` | Seed script | Daily competitor prices |
 | `weekly-own-snapshots` | `/skuId` | Seed script | Weekly aggregated own data |
@@ -417,7 +434,7 @@ See [`docs/`](docs/) for Architecture Decision Records:
 | [ADR-007](docs/ADR-007-database-schema-cosmosdb.md) | Database Schema — Cosmos DB |
 | [ADR-008](docs/ADR-008-synthetic-data-sku-inventory.md) | Synthetic Data — SKU Inventory |
 | [ADR-009](docs/ADR-009-api-data-flow.md) | API & Data Flow |
-| [ADR-010](docs/ADR-010-deployment-architecture.md) | Deployment — AKS + Azure Functions |
+| [ADR-010](docs/ADR-010-deployment-architecture.md) | Deployment — Azure Container Apps |
 | [ADR-011](docs/ADR-011-repository-structure.md) | Repository Structure |
 | [ADR-012](docs/ADR-012-getting-started.md) | Getting Started |
 

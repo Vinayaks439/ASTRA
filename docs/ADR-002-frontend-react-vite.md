@@ -12,7 +12,7 @@ The ASTRA frontend needs to present a supply-chain command center dashboard with
 
 ## Decision
 
-Use **React 19** with **Vite 7**, **TypeScript**, **Tailwind CSS**, and **shadcn/ui** for the component library. The app is served from an nginx container on AKS.
+Use **React 19** with **Vite 7**, **TypeScript**, **Tailwind CSS**, and **shadcn/ui** for the component library. The app is served from an nginx-based Container App on Azure Container Apps.
 
 ### Pages and Data Contracts
 

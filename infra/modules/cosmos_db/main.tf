@@ -34,6 +34,7 @@ locals {
   containers = {
     "skus"                   = "/category"
     "competitors"            = "/platform"
+    "hourly-comp-snapshots"  = "/skuId"
     "daily-own-snapshots"    = "/skuId"
     "daily-comp-snapshots"   = "/skuId"
     "weekly-own-snapshots"   = "/skuId"

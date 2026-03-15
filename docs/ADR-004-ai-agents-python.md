@@ -12,7 +12,7 @@ ASTRA requires intelligent, autonomous processing for risk assessment, recommend
 
 ## Decision
 
-Deploy **six specialized agents**, each as an **Azure Durable Function**, built with the **Microsoft Agent Framework** (successor to AutoGen + Semantic Kernel). Each agent uses **Azure OpenAI GPT-4o** for LLM capabilities and **Cosmos DB MCP Server** for data access.
+Deploy **six specialized agents**, each as an **Azure Container App**, built with the **Microsoft Agent Framework** (successor to AutoGen + Semantic Kernel). Each agent uses **Azure OpenAI GPT-4o** for LLM capabilities and **Cosmos DB MCP Server** for data access.
 
 ### Agent Ecosystem
 
@@ -142,7 +142,7 @@ Produces the natural language insights shown in the AI Summary Panel at the top 
 
 ## Consequences
 
-- Each agent is independently deployable and scalable as an Azure Durable Function.
+- Each agent is independently deployable and scalable as an Azure Container App.
 - The Microsoft Agent Framework provides built-in orchestration, state management, and LLM integration.
 - Deterministic formulas in the Risk Assessment Agent ensure reproducibility; LLM augmentation is optional for edge cases.
 - Agent specialization enables clear ownership and focused testing per domain.
