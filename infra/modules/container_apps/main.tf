@@ -16,7 +16,7 @@ locals {
     key => "https://ca-${var.project}-${key}-${var.environment}.${azurerm_container_app_environment.main.default_domain}"
   }
 
-  mcp_server_url = "https://ca-${var.project}-mcp-server-${var.environment}.${azurerm_container_app_environment.main.default_domain}/sse"
+  mcp_server_url = "https://ca-${var.project}-mcp-server-${var.environment}.internal.${azurerm_container_app_environment.main.default_domain}/sse"
 
   env_var_map = {
     "risk-assessment"   = "RISK_AGENT_URL"
