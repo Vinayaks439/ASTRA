@@ -1,6 +1,6 @@
 """Competitor Data Puller Agent — scans the web for competitor prices.
 
-Uses SerpAPI Google Shopping to find competitor products and prices for each
+Uses SearchAPI (searchapi.io) Google Shopping to find competitor products and prices for each
 SKU in the database, then writes hourly comp snapshots and updates the
 competitors collection.
 """
@@ -43,7 +43,7 @@ AGENT_CARD = AgentCard(
     ],
 )
 
-_SERP_URL = "https://serpapi.com/search"
+_SERP_URL = "https://www.searchapi.io/api/v1/search"
 
 
 def _parse_price(price_str: str) -> float | None:
@@ -67,13 +67,12 @@ def _domain(url: str) -> str:
 
 
 async def _find_competitor_prices(part_name: str, category: str) -> list[dict]:
-    """Use SerpAPI Google Shopping to find live competitor prices."""
+    """Use SearchAPI Google Shopping to find live competitor prices."""
     query = f"{part_name} {category}".strip()
     params = {
         "engine": "google_shopping",
         "q": query,
         "api_key": SERP_API_KEY,
-        "num": 10,
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
