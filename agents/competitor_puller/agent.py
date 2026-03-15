@@ -1,8 +1,8 @@
 """Competitor Data Puller Agent — scans the web for competitor prices.
 
 Uses Google Gemini with Google Search grounding to find competitor products
-and prices for each SKU in the database, then writes comp snapshots and
-updates the competitors collection in all three granularities (daily/weekly/monthly).
+and prices for each SKU in the database, then writes hourly comp snapshots and
+updates the competitors collection.
 """
 from __future__ import annotations
 
@@ -85,17 +85,9 @@ async def _find_competitor_prices(part_name: str, category: str) -> list[dict]:
         return []
 
 
-def _iso_week(dt: datetime) -> str:
-    iso = dt.isocalendar()
-    return f"{iso[0]}-W{iso[1]:02d}"
-
-
-def _iso_month(dt: datetime) -> str:
-    return dt.strftime("%Y-%m")
-
 
 async def handle_task(task_id: str, message: Message) -> Task:
-    """A2A task handler — pull competitor prices and update all comp snapshot collections."""
+    """A2A task handler — pull competitor prices and update hourly comp snapshot collection."""
     data: dict = {}
     for part in message.parts:
         if part.data:
@@ -107,9 +99,7 @@ async def handle_task(task_id: str, message: Message) -> Task:
         skus = [s for s in skus if s["id"] in sku_ids]
 
     now = datetime.now(timezone.utc)
-    today = now.strftime("%Y-%m-%d")
-    week = _iso_week(now)
-    month = _iso_month(now)
+    hour_slot = now.strftime("%Y-%m-%dT%H")
 
     results = []
     seen_competitors: dict[str, dict] = {}  # key: "compName|platform"
@@ -152,53 +142,21 @@ async def handle_task(task_id: str, message: Message) -> Task:
             competitor_id = seen_competitors[comp_key]["id"]
             price_gap_pct = round((own_price - comp_price) / own_price * 100, 2) if own_price > 0 else 0.0
 
-            # ── daily-comp-snapshots ──────────────────────────────────────────
+            # ── hourly-comp-snapshots ─────────────────────────────────────────
             await write_comp_snapshot({
-                "id": f"cs-daily-{sku_id}-{competitor_id}-{today}",
+                "id": f"cs-hourly-{sku_id}-{competitor_id}-{hour_slot}",
                 "skuId": sku_id,
                 "partNo": sku.get("partNo", ""),
                 "competitorId": competitor_id,
                 "compName": comp_name,
                 "platform": platform,
                 "storeURL": store_url,
-                "date": today,
+                "hourSlot": hour_slot,
                 "competitorPrice": comp_price,
                 "priceGapPct": price_gap_pct,
                 "productName": product_name,
                 "scrapedAt": now.isoformat(),
-            }, "daily")
-
-            # ── weekly-comp-snapshots ─────────────────────────────────────────
-            await write_comp_snapshot({
-                "id": f"cs-weekly-{sku_id}-{competitor_id}-{week}",
-                "skuId": sku_id,
-                "partNo": sku.get("partNo", ""),
-                "competitorId": competitor_id,
-                "compName": comp_name,
-                "platform": platform,
-                "week": week,
-                "avgCompPrice": comp_price,
-                "minCompPrice": comp_price,
-                "maxCompPrice": comp_price,
-                "avgPriceGapPct": price_gap_pct,
-                "scrapedAt": now.isoformat(),
-            }, "weekly")
-
-            # ── monthly-comp-snapshots ────────────────────────────────────────
-            await write_comp_snapshot({
-                "id": f"cs-monthly-{sku_id}-{competitor_id}-{month}",
-                "skuId": sku_id,
-                "partNo": sku.get("partNo", ""),
-                "competitorId": competitor_id,
-                "compName": comp_name,
-                "platform": platform,
-                "month": month,
-                "avgCompPrice": comp_price,
-                "minCompPrice": comp_price,
-                "maxCompPrice": comp_price,
-                "avgPriceGapPct": price_gap_pct,
-                "scrapedAt": now.isoformat(),
-            }, "monthly")
+            }, "hourly")
 
             written += 1
 

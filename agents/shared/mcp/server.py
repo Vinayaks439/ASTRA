@@ -114,8 +114,8 @@ def write_agent_decision(decision: str) -> str:
 
 
 @mcp.tool()
-def write_comp_snapshot(snapshot: str, granularity: str = "daily") -> str:
-    """Upsert a competitor price snapshot. Pass the document as a JSON string. granularity: daily|weekly|monthly."""
+def write_comp_snapshot(snapshot: str, granularity: str = "hourly") -> str:
+    """Upsert a competitor price snapshot. Pass the document as a JSON string. granularity: hourly|daily|weekly|monthly."""
     doc = json.loads(snapshot) if isinstance(snapshot, str) else snapshot
     return json.dumps(_cosmos.write_comp_snapshot(doc, granularity))
 

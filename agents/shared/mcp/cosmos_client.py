@@ -148,14 +148,15 @@ def write_agent_decision(decision: dict) -> dict:
     return _upsert("agent-decisions", decision)
 
 
-def write_comp_snapshot(snapshot: dict, granularity: str = "daily") -> dict:
+def write_comp_snapshot(snapshot: dict, granularity: str = "hourly") -> dict:
     """Upsert a competitor price snapshot into the appropriate granularity container."""
     container_map = {
+        "hourly": "hourly-comp-snapshots",
         "daily": "daily-comp-snapshots",
         "weekly": "weekly-comp-snapshots",
         "monthly": "monthly-comp-snapshots",
     }
-    container = container_map.get(granularity, "daily-comp-snapshots")
+    container = container_map.get(granularity, "hourly-comp-snapshots")
     return _upsert(container, snapshot)
 
 

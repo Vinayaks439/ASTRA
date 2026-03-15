@@ -114,11 +114,11 @@ func main() {
 		}
 	}()
 
-	// Competitor data puller — runs every 30 minutes to scan the web for competitor prices.
+	// Competitor data puller — runs every hour to scan the web for competitor prices.
 	go func() {
-		ticker := time.NewTicker(30 * time.Minute)
+		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
-		log.Println("[competitor-cron] started; interval=30m")
+		log.Println("[competitor-cron] started; interval=1h")
 		runCompetitorPuller(ctx, a2aClient)
 		for {
 			select {
