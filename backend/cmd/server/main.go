@@ -114,6 +114,23 @@ func main() {
 		}
 	}()
 
+	// Competitor data puller — runs every 30 minutes to scan the web for competitor prices.
+	go func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		log.Println("[competitor-cron] started; interval=30m")
+		runCompetitorPuller(ctx, a2aClient)
+		for {
+			select {
+			case <-ticker.C:
+				runCompetitorPuller(ctx, a2aClient)
+			case <-ctx.Done():
+				log.Println("[competitor-cron] stopped")
+				return
+			}
+		}
+	}()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -544,6 +561,19 @@ func insightsHandler(repo *repository.Repository) http.HandlerFunc {
 			"source":      "agent-llm",
 		})
 	}
+}
+
+func runCompetitorPuller(ctx context.Context, a2a *agent.A2AClient) {
+	taskID := fmt.Sprintf("comp-pull-%d", time.Now().UnixNano())
+	log.Printf("[competitor-cron] triggering task %s", taskID)
+	pullCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	res, err := a2a.SendTask(pullCtx, "competitor-puller", taskID, map[string]interface{}{})
+	if err != nil {
+		log.Printf("[competitor-cron] task %s failed: %v", taskID, err)
+		return
+	}
+	log.Printf("[competitor-cron] task %s completed: state=%s", taskID, res.Status.State)
 }
 
 func computeRisk(e *enrichedSKU) {

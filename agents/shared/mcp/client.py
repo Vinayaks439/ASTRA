@@ -104,3 +104,13 @@ async def write_audit(entry: dict) -> dict:
 async def write_agent_decision(decision: dict) -> dict:
     """Log an agent decision and rationale via MCP."""
     return await _call("write_agent_decision", {"decision": json.dumps(decision)})
+
+
+async def write_comp_snapshot(snapshot: dict, granularity: str = "daily") -> dict:
+    """Upsert a competitor price snapshot via MCP."""
+    return await _call("write_comp_snapshot", {"snapshot": json.dumps(snapshot), "granularity": granularity})
+
+
+async def write_competitor(competitor: dict) -> dict:
+    """Upsert a competitor profile via MCP."""
+    return await _call("write_competitor", {"competitor": json.dumps(competitor)})

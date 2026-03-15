@@ -8,6 +8,7 @@ locals {
     "rationale"        = { port = 7074, module = "rationale.agent" }
     "insights"         = { port = 7075, module = "insights.agent" }
     "notification"     = { port = 7076, module = "notification.agent" }
+    "competitor-puller" = { port = 7077, module = "competitor_puller.agent" }
   }
 
   agent_fqdns = {
@@ -18,12 +19,13 @@ locals {
   mcp_server_url = "https://ca-${var.project}-mcp-server-${var.environment}.${azurerm_container_app_environment.main.default_domain}/sse"
 
   env_var_map = {
-    "risk-assessment"  = "RISK_AGENT_URL"
-    "recommendation"   = "RECOMMENDATION_AGENT_URL"
-    "exception-triage" = "TRIAGE_AGENT_URL"
-    "rationale"        = "RATIONALE_AGENT_URL"
-    "insights"         = "INSIGHTS_AGENT_URL"
-    "notification"     = "NOTIFICATION_AGENT_URL"
+    "risk-assessment"   = "RISK_AGENT_URL"
+    "recommendation"    = "RECOMMENDATION_AGENT_URL"
+    "exception-triage"  = "TRIAGE_AGENT_URL"
+    "rationale"         = "RATIONALE_AGENT_URL"
+    "insights"          = "INSIGHTS_AGENT_URL"
+    "notification"      = "NOTIFICATION_AGENT_URL"
+    "competitor-puller" = "COMPETITOR_PULLER_URL"
   }
 }
 
@@ -77,6 +79,11 @@ resource "azurerm_container_app" "agents" {
   secret {
     name  = "openai-key"
     value = var.openai_key
+  }
+
+  secret {
+    name  = "google-ai-key"
+    value = var.google_ai_key
   }
 
   ingress {
@@ -176,8 +183,18 @@ resource "azurerm_container_app" "agents" {
       }
 
       env {
+        name  = "COMPETITOR_PULLER_URL"
+        value = local.agent_fqdns["competitor-puller"]
+      }
+
+      env {
         name  = "MCP_SERVER_URL"
         value = local.mcp_server_url
+      }
+
+      env {
+        name        = "GOOGLE_AI_KEY"
+        secret_name = "google-ai-key"
       }
 
       liveness_probe {
@@ -388,6 +405,11 @@ resource "azurerm_container_app" "backend" {
       env {
         name  = "NOTIFICATION_AGENT_URL"
         value = local.agent_fqdns["notification"]
+      }
+
+      env {
+        name  = "COMPETITOR_PULLER_URL"
+        value = local.agent_fqdns["competitor-puller"]
       }
 
       liveness_probe {

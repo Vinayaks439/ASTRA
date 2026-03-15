@@ -72,6 +72,15 @@ ENV AGENT_MODULE=notification.agent \
 EXPOSE 7076
 ENTRYPOINT ["/entrypoint.sh"]
 
+# ── competitor-puller ─────────────────────────────────────────────────────────
+FROM base AS competitor-puller
+COPY --from=base /app /app
+COPY competitor_puller/ competitor_puller/
+ENV AGENT_MODULE=competitor_puller.agent \
+    AGENT_PORT=7077
+EXPOSE 7077
+ENTRYPOINT ["/entrypoint.sh"]
+
 # ── mcp-server ────────────────────────────────────────────────────────────────
 FROM base AS mcp-server
 COPY --from=base /app /app

@@ -57,3 +57,9 @@ variable "openai_deployment" {
   type    = string
   default = "astra-gpt"
 }
+
+variable "google_ai_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}

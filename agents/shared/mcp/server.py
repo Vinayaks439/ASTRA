@@ -113,6 +113,20 @@ def write_agent_decision(decision: str) -> str:
     return json.dumps(_cosmos.write_agent_decision(doc))
 
 
+@mcp.tool()
+def write_comp_snapshot(snapshot: str, granularity: str = "daily") -> str:
+    """Upsert a competitor price snapshot. Pass the document as a JSON string. granularity: daily|weekly|monthly."""
+    doc = json.loads(snapshot) if isinstance(snapshot, str) else snapshot
+    return json.dumps(_cosmos.write_comp_snapshot(doc, granularity))
+
+
+@mcp.tool()
+def write_competitor(competitor: str) -> str:
+    """Upsert a competitor profile into the competitors collection. Pass the document as a JSON string."""
+    doc = json.loads(competitor) if isinstance(competitor, str) else competitor
+    return json.dumps(_cosmos.write_competitor(doc))
+
+
 # ── Server entry point ────────────────────────────────────────────────────────
 
 

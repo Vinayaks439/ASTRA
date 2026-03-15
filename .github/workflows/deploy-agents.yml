@@ -26,6 +26,7 @@ jobs:
           - name: rationale
           - name: insights
           - name: notification
+          - name: competitor-puller
           - name: mcp-server
 
     steps:

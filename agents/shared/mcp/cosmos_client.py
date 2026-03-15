@@ -146,3 +146,19 @@ def write_audit(entry: dict) -> dict:
 def write_agent_decision(decision: dict) -> dict:
     """Log an agent's decision and rationale."""
     return _upsert("agent-decisions", decision)
+
+
+def write_comp_snapshot(snapshot: dict, granularity: str = "daily") -> dict:
+    """Upsert a competitor price snapshot into the appropriate granularity container."""
+    container_map = {
+        "daily": "daily-comp-snapshots",
+        "weekly": "weekly-comp-snapshots",
+        "monthly": "monthly-comp-snapshots",
+    }
+    container = container_map.get(granularity, "daily-comp-snapshots")
+    return _upsert(container, snapshot)
+
+
+def write_competitor(competitor: dict) -> dict:
+    """Upsert a competitor profile into the competitors collection."""
+    return _upsert("competitors", competitor)

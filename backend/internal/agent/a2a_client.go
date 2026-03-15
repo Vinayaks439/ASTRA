@@ -100,7 +100,8 @@ func NewA2AClient() *A2AClient {
 		"exception-triage": envOrDefault("TRIAGE_AGENT_URL", "http://localhost:7073"),
 		"rationale":        envOrDefault("RATIONALE_AGENT_URL", "http://localhost:7074"),
 		"insights":         envOrDefault("INSIGHTS_AGENT_URL", "http://localhost:7075"),
-		"notification":     envOrDefault("NOTIFICATION_AGENT_URL", "http://localhost:7076"),
+		"notification":      envOrDefault("NOTIFICATION_AGENT_URL", "http://localhost:7076"),
+		"competitor-puller": envOrDefault("COMPETITOR_PULLER_URL", "http://localhost:7077"),
 	}
 	log.Printf("[a2a] agent URLs: %v", urls)
 	return &A2AClient{

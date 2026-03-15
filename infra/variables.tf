@@ -46,6 +46,13 @@ variable "openai_deployment" {
   default     = "astra-gpt"
 }
 
+variable "google_ai_key" {
+  description = "Google AI Studio API key for Gemini Google Search grounding"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "openai_capacity" {
   description = "Azure OpenAI capacity in thousands of tokens per minute"
   type        = number
