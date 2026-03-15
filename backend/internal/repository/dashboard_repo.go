@@ -149,6 +149,56 @@ func (r *Repository) GetLatestCompSnapshotsForPeriod(ctx context.Context, skuID,
 	return latest, nil
 }
 
+func (r *Repository) GetDailyOwnSnapshotsRange(ctx context.Context, skuID, startDate, endDate string) ([]DailyOwnSnapshot, error) {
+	pk := azcosmos.NewPartitionKeyString(skuID)
+	items, err := r.queryItems(ctx, "daily-own-snapshots",
+		"SELECT TOP 30 * FROM c WHERE c.skuId = @skuId AND c.date >= @start AND c.date <= @end ORDER BY c.date ASC",
+		&pk,
+		[]azcosmos.QueryParameter{
+			{Name: "@skuId", Value: skuID},
+			{Name: "@start", Value: startDate},
+			{Name: "@end", Value: endDate},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]DailyOwnSnapshot, 0, len(items))
+	for _, raw := range items {
+		var doc DailyOwnSnapshot
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, fmt.Errorf("unmarshal daily own snapshot: %w", err)
+		}
+		docs = append(docs, doc)
+	}
+	return docs, nil
+}
+
+func (r *Repository) GetDailyCompSnapshotsRange(ctx context.Context, skuID, startDate, endDate string) ([]DailyCompSnapshot, error) {
+	pk := azcosmos.NewPartitionKeyString(skuID)
+	items, err := r.queryItems(ctx, "daily-comp-snapshots",
+		"SELECT * FROM c WHERE c.skuId = @skuId AND c.date >= @start AND c.date <= @end ORDER BY c.date ASC",
+		&pk,
+		[]azcosmos.QueryParameter{
+			{Name: "@skuId", Value: skuID},
+			{Name: "@start", Value: startDate},
+			{Name: "@end", Value: endDate},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]DailyCompSnapshot, 0, len(items))
+	for _, raw := range items {
+		var doc DailyCompSnapshot
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, fmt.Errorf("unmarshal daily comp snapshot: %w", err)
+		}
+		docs = append(docs, doc)
+	}
+	return docs, nil
+}
+
 func (r *Repository) GetLatestDailyCompSnapshots(ctx context.Context, skuID string) ([]DailyCompSnapshot, error) {
 	pk := azcosmos.NewPartitionKeyString(skuID)
 	items, err := r.queryItems(ctx, "daily-comp-snapshots",

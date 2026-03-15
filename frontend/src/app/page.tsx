@@ -2,6 +2,10 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef, createContext, useContext } from "react";
+import {
+  ComposedChart, LineChart, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip,
+  Area, Bar as RBar, Line, ReferenceLine, ResponsiveContainer,
+} from "recharts";
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // THEME CONTEXT
@@ -534,6 +538,67 @@ function Dashboard({skus,setSelected,selected,tickets,audit,loading}){
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SIMPLE MARKDOWN RENDERER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function MdLine({text,t}){
+  // inline: **bold**, `code`
+  const parts=[];let i=0;let key=0;
+  while(i<text.length){
+    if(text[i]==="*"&&text[i+1]==="*"){
+      const end=text.indexOf("**",i+2);
+      if(end>-1){parts.push(<strong key={key++} style={{color:t.t1}}>{text.slice(i+2,end)}</strong>);i=end+2;continue;}
+    }
+    if(text[i]==="`"){
+      const end=text.indexOf("`",i+1);
+      if(end>-1){parts.push(<code key={key++} style={{background:t.bdr,color:t.t2,padding:"1px 4px",borderRadius:3,fontSize:"0.9em"}}>{text.slice(i+1,end)}</code>);i=end+1;continue;}
+    }
+    const next=text.indexOf("**",i);const nxt2=text.indexOf("`",i);
+    const stop=Math.min(next>-1?next:text.length,nxt2>-1?nxt2:text.length);
+    parts.push(text.slice(i,stop));i=stop;
+  }
+  return <>{parts}</>;
+}
+
+function SimpleMarkdown({text,t}){
+  if(!text)return null;
+  const lines=text.split("\n");
+  const out=[];let inList=false;let listItems=[];let key=0;
+  const flushList=()=>{if(listItems.length){out.push(<ul key={key++} style={{margin:"4px 0 8px 16px",padding:0,listStyleType:"disc"}}>{listItems}</ul>);listItems=[];inList=false;}};
+  for(const raw of lines){
+    const line=raw.trimEnd();
+    if(!line){flushList();out.push(<div key={key++} style={{height:6}}/>);continue;}
+    if(line.startsWith("### ")){flushList();out.push(<div key={key++} style={{fontSize:12,fontWeight:700,color:t.t1,margin:"10px 0 4px",textTransform:"uppercase",letterSpacing:".04em"}}><MdLine text={line.slice(4)} t={t}/></div>);continue;}
+    if(line.startsWith("## ")){flushList();out.push(<div key={key++} style={{fontSize:13,fontWeight:700,color:t.t1,margin:"10px 0 4px"}}><MdLine text={line.slice(3)} t={t}/></div>);continue;}
+    if(line.startsWith("# ")){flushList();out.push(<div key={key++} style={{fontSize:14,fontWeight:800,color:t.t1,margin:"10px 0 4px"}}><MdLine text={line.slice(2)} t={t}/></div>);continue;}
+    if(line.match(/^[-*] /)){inList=true;listItems.push(<li key={key++} style={{fontSize:12,color:t.t2,lineHeight:1.6,marginBottom:2}}><MdLine text={line.slice(2)} t={t}/></li>);continue;}
+    flushList();
+    out.push(<div key={key++} style={{fontSize:12,color:t.t2,lineHeight:1.7,marginBottom:3}}><MdLine text={line} t={t}/></div>);
+  }
+  flushList();
+  return <>{out}</>;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DRAWER ACCORDION ITEM
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function AccItem({title,badge,children,defaultOpen=true}){
+  const t=useT();
+  const [open,setOpen]=useState(defaultOpen);
+  return <div style={{border:`1px solid ${t.bdr}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+    <button onClick={()=>setOpen(!open)} style={{
+      width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+      padding:"10px 14px",background:t.surf2,border:"none",cursor:"pointer"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,fontWeight:700,color:t.t2,textTransform:"uppercase",letterSpacing:".05em"}}>{title}</span>
+        {badge&&<span style={{fontSize:10,background:t.pri,color:"#fff",padding:"1px 6px",borderRadius:99}}>{badge}</span>}
+      </div>
+      <span style={{fontSize:11,color:t.t3}}>{open?"▲":"▼"}</span>
+    </button>
+    {open&&<div className="fi" style={{padding:"12px 14px",background:t.surf}}>{children}</div>}
+  </div>;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // SKU DRAWER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,approved,ticketed}){
@@ -541,6 +606,47 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
   const [evid,setEvid]=useState(false);
   const [rationale,setRationale]=useState<any>(null);
   const [rationaleLoading,setRationaleLoading]=useState(false);
+
+  // ── SKU Detail (charts data) ──────────────────────────────────────
+  const [detail,setDetail]=useState<any>(null);
+  const [detailLoading,setDetailLoading]=useState(false);
+  const detailSkuRef=useRef<string|null>(null);
+
+  useEffect(()=>{
+    const id=sku.cosmosId||sku.id;
+    if(detailSkuRef.current===id)return;
+    detailSkuRef.current=id;
+    setDetailLoading(true);
+    fetch(`/api/v1/sku-detail/${id}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>setDetail(d))
+      .catch(()=>setDetail(null))
+      .finally(()=>setDetailLoading(false));
+  },[sku]);
+
+  // ── AI Insight (always-visible rationale) ────────────────────────
+  const [insight,setInsight]=useState<any>(null);
+  const [insightLoading,setInsightLoading]=useState(false);
+  const [insightError,setInsightError]=useState(false);
+  const insightSkuRef=useRef<string|null>(null);
+
+  const fetchInsight=()=>{
+    const id=sku.cosmosId||sku.id;
+    insightSkuRef.current=id;
+    setInsightLoading(true);setInsightError(false);
+    fetch(`/api/v1/agent-rationale/${id}`)
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{if(d?.rationale)setInsight(d.rationale);else setInsight(null);})
+      .catch(()=>{setInsight(null);setInsightError(true);})
+      .finally(()=>setInsightLoading(false));
+  };
+
+  useEffect(()=>{
+    const id=sku.cosmosId||sku.id;
+    if(insightSkuRef.current===id)return;
+    fetchInsight();
+  },[sku]);
+
   const hasAgentRec=!!sku.recAction;
   const rec=hasAgentRec?{
     action:sku.recAction,
@@ -760,6 +866,152 @@ function SKUDrawer({sku,onClose,onAction,onRunAgent,skuAgentRunning,poOn,waOn,ap
           </div>
         ))}
       </div>}
+
+      {/* ── ANALYTICS ACCORDION ─────────────────────────── */}
+      <div style={{marginTop:8}}>
+        <div style={{fontSize:11,fontWeight:700,color:t.t3,textTransform:"uppercase",
+          letterSpacing:".05em",marginBottom:8}}>Analytics</div>
+
+        {/* Section A — Inventory Burndown */}
+        <AccItem title="Inventory Burndown">
+          {detailLoading&&<div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <Sk h={12} w={120}/><Sk h={180}/><Sk h={10} w={80}/>
+          </div>}
+          {!detailLoading&&(!detail?.ownSnapshots?.length)&&
+            <div style={{fontSize:12,color:t.t3,textAlign:"center",padding:"20px 0"}}>
+              No snapshot data for the last 30 days
+            </div>}
+          {!detailLoading&&detail?.ownSnapshots?.length>0&&(()=>{
+            const data=detail.ownSnapshots.map(s=>({
+              date:s.date.slice(5), // MM-DD
+              onHand:s.onHandUnits,
+              inbound:s.inboundUnits,
+              velocity:Math.round(s.dailyVelocity*10)/10,
+            }));
+            return <>
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={data} margin={{top:4,right:30,left:0,bottom:0}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={t.bdr}/>
+                  <XAxis dataKey="date" tick={{fontSize:10,fill:t.t3}} tickLine={false}/>
+                  <YAxis yAxisId="left" tick={{fontSize:10,fill:t.t3}} tickLine={false} axisLine={false}/>
+                  <YAxis yAxisId="right" orientation="right" tick={{fontSize:10,fill:t.t3}} tickLine={false} axisLine={false}/>
+                  <RTooltip contentStyle={{background:t.surf2,border:`1px solid ${t.bdr}`,borderRadius:8,fontSize:11,color:t.t1}}/>
+                  <Area yAxisId="left" type="monotone" dataKey="onHand" name="On Hand" fill={t.pri+"33"} stroke={t.pri} strokeWidth={2}/>
+                  <RBar yAxisId="left" dataKey="inbound" name="Inbound" fill={t.teal+"66"} stackId="a"/>
+                  <Line yAxisId="right" type="monotone" dataKey="velocity" name="Velocity/day" stroke={t.warn} strokeWidth={1.5} strokeDasharray="4 2" dot={false}/>
+                  <ReferenceLine yAxisId="left" y={0} stroke={t.crit} strokeDasharray="4 2" label={{value:"Stockout",position:"insideTopLeft",fontSize:10,fill:t.crit}}/>
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div style={{display:"flex",gap:12,marginTop:6,flexWrap:"wrap"}}>
+                {[["■",t.pri,"On Hand"],["■",t.teal,"Inbound"],["─",t.warn,"Velocity/day"]].map(([icon,color,lbl])=>(
+                  <span key={lbl} style={{fontSize:10,color:t.t3,display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{color}}>{icon}</span>{lbl}
+                  </span>
+                ))}
+              </div>
+            </>;
+          })()}
+        </AccItem>
+
+        {/* Section B — Price vs Competitor */}
+        <AccItem title="Price vs Competitor">
+          {detailLoading&&<div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <Sk h={12} w={100}/><Sk h={160}/><Sk h={10} w={60}/>
+          </div>}
+          {!detailLoading&&(!detail?.ownSnapshots?.length&&!detail?.compSnapshots?.length)&&
+            <div style={{fontSize:12,color:t.t3,textAlign:"center",padding:"20px 0"}}>
+              No price data for the last 30 days
+            </div>}
+          {!detailLoading&&(detail?.ownSnapshots?.length||detail?.compSnapshots?.length)&&(()=>{
+            // Merge own + comp by date
+            const ownMap={};
+            (detail.ownSnapshots||[]).forEach(s=>{ownMap[s.date]=s.sellingPrice||sku.own;});
+            const compMap={};
+            (detail.compSnapshots||[]).forEach(s=>{compMap[s.date]=s.competitorPrice;});
+            const allDates=[...new Set([
+              ...(detail.ownSnapshots||[]).map(s=>s.date),
+              ...(detail.compSnapshots||[]).map(s=>s.date),
+            ])].sort();
+            const chartData=allDates.map(d=>({
+              date:d.slice(5),
+              ownPrice:ownMap[d]??sku.own,
+              compPrice:compMap[d]??null,
+            }));
+            // Badge
+            const latestOwn=sku.own;
+            const latestComp=sku.comp;
+            const gap=latestComp?(latestOwn-latestComp)/latestComp:0;
+            const badge=!latestComp?null
+              :gap<0?{c:t.good,bg:t.goodBg,bd:t.goodBd,lbl:"Competitive"}
+              :Math.abs(gap)<0.05?{c:t.warn,bg:t.warnBg,bd:t.warnBd,lbl:"Close"}
+              :{c:t.crit,bg:t.critBg,bd:t.critBd,lbl:"Undercut"};
+            const hasLive=(detail.compSnapshots||[]).some(s=>s.source==="crawler");
+            return <>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                {badge&&<span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,
+                  color:badge.c,background:badge.bg,border:`1px solid ${badge.bd}`}}>{badge.lbl}</span>}
+                {hasLive&&<span style={{fontSize:10,color:t.warn,background:t.warnBg,border:`1px solid ${t.warnBd}`,
+                  padding:"2px 8px",borderRadius:99}}>⚡ Live</span>}
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={chartData} margin={{top:4,right:4,left:0,bottom:0}}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={t.bdr}/>
+                  <XAxis dataKey="date" tick={{fontSize:10,fill:t.t3}} tickLine={false}/>
+                  <YAxis tick={{fontSize:10,fill:t.t3}} tickLine={false} axisLine={false}/>
+                  <RTooltip contentStyle={{background:t.surf2,border:`1px solid ${t.bdr}`,borderRadius:8,fontSize:11,color:t.t1}}
+                    formatter={(val,name,props)=>{
+                      const own=props.payload?.ownPrice;const comp=props.payload?.compPrice;
+                      const g=own&&comp?` (gap ₹${Math.round(own-comp)})`:""
+                      return [`₹${val?.toLocaleString()}${name==="Your Price"?g:""}`,name];
+                    }}/>
+                  <Line type="monotone" dataKey="ownPrice" name="Your Price" stroke={t.pri} strokeWidth={2} dot={false}/>
+                  <Line type="monotone" dataKey="compPrice" name="Best Competitor" stroke="#F59E0B" strokeWidth={2} dot={false} connectNulls/>
+                </LineChart>
+              </ResponsiveContainer>
+              <div style={{display:"flex",gap:12,marginTop:6}}>
+                {[["─",t.pri,"Your Price"],["─","#F59E0B","Best Competitor"]].map(([icon,color,lbl])=>(
+                  <span key={lbl} style={{fontSize:10,color:t.t3,display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{color}}>{icon}</span>{lbl}
+                  </span>
+                ))}
+              </div>
+            </>;
+          })()}
+        </AccItem>
+
+        {/* Section C — AI Insight Summary */}
+        <AccItem title="AI Analysis" badge={insight?"Agent":""}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:16}}>✨</span>
+              <span style={{fontSize:11,fontWeight:700,color:t.pri,letterSpacing:".04em"}}>SKU-LEVEL INSIGHT</span>
+            </div>
+            <button onClick={()=>{setInsight(null);setInsightError(false);fetchInsight();}}
+              disabled={insightLoading}
+              title="Refresh insight"
+              style={{background:"none",border:`1px solid ${t.bdr}`,borderRadius:6,
+                padding:"3px 8px",fontSize:11,color:t.t3,cursor:insightLoading?"not-allowed":"pointer",
+                opacity:insightLoading?.5:1}}>
+              {insightLoading?"…":"↻"}
+            </button>
+          </div>
+          {insightLoading&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <Sk h={12} w="90%"/><Sk h={12} w="75%"/><Sk h={12} w="80%"/>
+          </div>}
+          {!insightLoading&&insightError&&<div style={{fontSize:12,color:t.crit}}>
+            Failed to load insight.{" "}
+            <button onClick={fetchInsight} style={{background:"none",border:"none",color:t.pri,
+              cursor:"pointer",fontSize:12,textDecoration:"underline"}}>Retry</button>
+          </div>}
+          {!insightLoading&&!insightError&&!insight&&<div style={{fontSize:12,color:t.t3,fontStyle:"italic"}}>
+            No AI insight yet — run agents to generate SKU-level analysis.
+          </div>}
+          {!insightLoading&&insight&&
+            <div style={{background:t.autoBg,border:`1px solid ${t.autoBd}`,borderRadius:8,padding:"10px 12px"}}>
+              <SimpleMarkdown text={insight} t={t}/>
+            </div>}
+        </AccItem>
+      </div>
     </div>
   </div>;
 }

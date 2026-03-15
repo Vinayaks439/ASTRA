@@ -99,6 +99,7 @@ func main() {
 	topMux.HandleFunc("GET /api/v1/agents/status/{id}", agentStatusHandler())
 	topMux.HandleFunc("GET /api/v1/notifications", notificationsHandler(repo))
 	topMux.HandleFunc("GET /api/v1/agent-rationale/{skuId}", agentRationaleHandler(repo))
+	topMux.HandleFunc("GET /api/v1/sku-detail/{skuId}", skuDetailHandler(repo))
 	topMux.HandleFunc("GET /api/v1/insights", insightsHandler(repo))
 	topMux.Handle("/", mux)
 
@@ -559,6 +560,102 @@ func insightsHandler(repo *repository.Repository) http.HandlerFunc {
 			"insights":    insights,
 			"generatedAt": doc.GeneratedAt,
 			"source":      "agent-llm",
+		})
+	}
+}
+
+type skuDetailOwnPoint struct {
+	Date          string  `json:"date"`
+	OnHandUnits   int     `json:"onHandUnits"`
+	InboundUnits  int     `json:"inboundUnits"`
+	DailyVelocity float64 `json:"dailyVelocity"`
+	SellingPrice  float64 `json:"sellingPrice"`
+}
+
+type skuDetailCompPoint struct {
+	Date            string  `json:"date"`
+	CompetitorPrice float64 `json:"competitorPrice"`
+	CompName        string  `json:"compName"`
+	Platform        string  `json:"platform"`
+	PriceGapPct     float64 `json:"priceGapPct"`
+}
+
+func skuDetailHandler(repo *repository.Repository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		skuID := r.PathValue("skuId")
+		if skuID == "" {
+			parts := strings.Split(r.URL.Path, "/")
+			if len(parts) > 0 {
+				skuID = parts[len(parts)-1]
+			}
+		}
+
+		ctx := r.Context()
+		end := time.Now().UTC()
+		start := end.AddDate(0, 0, -30)
+		startStr := start.Format("2006-01-02")
+		endStr := end.Format("2006-01-02")
+
+		ownDocs, err := repo.GetDailyOwnSnapshotsRange(ctx, skuID, startStr, endStr)
+		if err != nil {
+			log.Printf("[sku-detail] own snapshots %s: %v", skuID, err)
+		}
+		compDocs, err := repo.GetDailyCompSnapshotsRange(ctx, skuID, startStr, endStr)
+		if err != nil {
+			log.Printf("[sku-detail] comp snapshots %s: %v", skuID, err)
+		}
+
+		ownPoints := make([]skuDetailOwnPoint, 0, len(ownDocs))
+		for _, d := range ownDocs {
+			ownPoints = append(ownPoints, skuDetailOwnPoint{
+				Date:          d.Date,
+				OnHandUnits:   d.OnHandUnits,
+				InboundUnits:  d.InboundUnits,
+				DailyVelocity: d.DailyVelocity,
+				SellingPrice:  d.OwnPrice,
+			})
+		}
+
+		// Group comp by date, take lowest price per date
+		type compAgg struct {
+			min      float64
+			compName string
+			platform string
+			gapPct   float64
+		}
+		aggByDate := make(map[string]*compAgg)
+		for _, d := range compDocs {
+			if agg, ok := aggByDate[d.Date]; !ok {
+				aggByDate[d.Date] = &compAgg{d.CompetitorPrice, d.CompName, d.Platform, d.PriceGapPct}
+			} else if d.CompetitorPrice < agg.min {
+				agg.min = d.CompetitorPrice
+				agg.compName = d.CompName
+				agg.platform = d.Platform
+				agg.gapPct = d.PriceGapPct
+			}
+		}
+		dates := make([]string, 0, len(aggByDate))
+		for d := range aggByDate {
+			dates = append(dates, d)
+		}
+		sort.Strings(dates)
+		compPoints := make([]skuDetailCompPoint, 0, len(dates))
+		for _, date := range dates {
+			agg := aggByDate[date]
+			compPoints = append(compPoints, skuDetailCompPoint{
+				Date:            date,
+				CompetitorPrice: agg.min,
+				CompName:        agg.compName,
+				Platform:        agg.platform,
+				PriceGapPct:     agg.gapPct,
+			})
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"skuId":        skuID,
+			"ownSnapshots": ownPoints,
+			"compSnapshots": compPoints,
 		})
 	}
 }
