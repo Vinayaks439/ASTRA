@@ -82,8 +82,8 @@ resource "azurerm_container_app" "agents" {
   }
 
   secret {
-    name  = "google-ai-key"
-    value = var.google_ai_key
+    name  = "serp-api-key"
+    value = var.serp_api_key
   }
 
   ingress {
@@ -193,8 +193,8 @@ resource "azurerm_container_app" "agents" {
       }
 
       env {
-        name        = "GOOGLE_AI_KEY"
-        secret_name = "google-ai-key"
+        name        = "SERP_API_KEY"
+        secret_name = "serp-api-key"
       }
 
       liveness_probe {

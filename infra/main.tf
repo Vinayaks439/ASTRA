@@ -54,7 +54,7 @@ module "container_apps" {
   openai_endpoint     = data.azurerm_cognitive_account.openai.endpoint
   openai_key          = data.azurerm_cognitive_account.openai.primary_access_key
   openai_deployment   = var.openai_deployment
-  google_ai_key       = var.google_ai_key
+  serp_api_key        = var.serp_api_key
 }
 
 module "service_bus" {

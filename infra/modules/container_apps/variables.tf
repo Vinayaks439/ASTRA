@@ -58,7 +58,7 @@ variable "openai_deployment" {
   default = "astra-gpt"
 }
 
-variable "google_ai_key" {
+variable "serp_api_key" {
   type      = string
   sensitive = true
   default   = ""

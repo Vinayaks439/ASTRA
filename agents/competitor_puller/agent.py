@@ -1,24 +1,24 @@
 """Competitor Data Puller Agent — scans the web for competitor prices.
 
-Uses Google Gemini with Google Search grounding to find competitor products
-and prices for each SKU in the database, then writes hourly comp snapshots and
-updates the competitors collection.
+Uses SerpAPI Google Shopping to find competitor products and prices for each
+SKU in the database, then writes hourly comp snapshots and updates the
+competitors collection.
 """
 from __future__ import annotations
 
-import json
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import urlparse
 
-from google import genai
-from google.genai import types
+import httpx
 
 from shared.a2a.models import AgentCard, Message, Skill, Task
 from shared.a2a.server import A2AServer, make_completed_task
 from shared.config import (
     AGENT_URLS,
-    GOOGLE_AI_KEY,
+    SERP_API_KEY,
 )
 from shared.mcp.client import (
     query_skus,
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_CARD = AgentCard(
     name="competitor-puller-agent",
-    description="Scans the web for competitor prices using Gemini Google Search grounding",
+    description="Scans the web for competitor prices using SerpAPI Google Shopping",
     url=AGENT_URLS["competitor-puller"],
     skills=[
         Skill(
@@ -43,47 +43,59 @@ AGENT_CARD = AgentCard(
     ],
 )
 
+_SERP_URL = "https://serpapi.com/search"
+
+
+def _parse_price(price_str: str) -> float | None:
+    """Extract a float from a price string like '$19.99' or '19.99 USD'."""
+    if not price_str:
+        return None
+    cleaned = re.sub(r"[^\d.]", "", str(price_str))
+    try:
+        val = float(cleaned)
+        return val if val > 0 else None
+    except ValueError:
+        return None
+
+
+def _domain(url: str) -> str:
+    """Return the hostname from a URL, falling back to 'web'."""
+    try:
+        return urlparse(url).hostname or "web"
+    except Exception:
+        return "web"
+
 
 async def _find_competitor_prices(part_name: str, category: str) -> list[dict]:
-    """Use Gemini with Google Search grounding to find live competitor prices."""
-    client = genai.Client(api_key=GOOGLE_AI_KEY)
+    """Use SerpAPI Google Shopping to find live competitor prices."""
+    query = f"{part_name} {category}".strip()
+    params = {
+        "engine": "google_shopping",
+        "q": query,
+        "api_key": SERP_API_KEY,
+        "num": 10,
+    }
 
-    prompt = (
-        f'Find current retail prices for "{part_name}" in the {category} category from online stores. '
-        "Return a JSON object with a \"competitors\" array. Each entry must have: "
-        "compName (retailer name), platform (website domain, e.g. amazon.com), "
-        "competitorPrice (number, the price), storeURL (URL), productName (exact name listed). "
-        "Only include entries where a specific price is clearly stated. "
-        "Return empty array if none found. Return ONLY valid JSON."
-    )
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.get(_SERP_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
 
-    response = await client.aio.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            tools=[types.Tool(google_search=types.GoogleSearch())],
-            temperature=0,
-        ),
-    )
+    results = []
+    for item in data.get("shopping_results", []):
+        price = _parse_price(item.get("price", ""))
+        if price is None:
+            continue
+        link = item.get("link", "")
+        results.append({
+            "compName": item.get("source", "Unknown"),
+            "platform": _domain(link),
+            "competitorPrice": price,
+            "storeURL": link,
+            "productName": item.get("title", part_name),
+        })
 
-    raw = response.text or "{}"
-    # Strip markdown code fences if present
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            return parsed
-        return parsed.get("competitors", [])
-    except (json.JSONDecodeError, AttributeError):
-        logger.warning("[competitor-puller] failed to parse Gemini response: %r", raw[:200])
-        return []
-
+    return results
 
 
 async def handle_task(task_id: str, message: Message) -> Task:

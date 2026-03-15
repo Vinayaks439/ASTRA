@@ -46,8 +46,8 @@ variable "openai_deployment" {
   default     = "astra-gpt"
 }
 
-variable "google_ai_key" {
-  description = "Google AI Studio API key for Gemini Google Search grounding"
+variable "serp_api_key" {
+  description = "SerpAPI key for Google Shopping competitor price scraping"
   type        = string
   sensitive   = true
   default     = ""

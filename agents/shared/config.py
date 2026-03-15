@@ -14,7 +14,7 @@ SERVICEBUS_CONNECTION = os.getenv("SERVICEBUS_CONNECTION", "")
 
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://localhost:6060/sse")
 
-GOOGLE_AI_KEY = os.getenv("GOOGLE_AI_KEY", "")
+SERP_API_KEY = os.getenv("SERP_API_KEY", "")
 
 AGENT_URLS = {
     "risk-assessment": os.getenv("RISK_AGENT_URL", "http://localhost:7071"),
